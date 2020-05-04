@@ -1,123 +1,91 @@
 import Map from '../../../../../src/ol/Map.js';
-import View from '../../../../../src/ol/View.js';
 import TileLayer from '../../../../../src/ol/layer/Tile.js';
-import {get as getProjection} from '../../../../../src/ol/proj.js';
-import MapRenderer from '../../../../../src/ol/renderer/Map.js';
-import CanvasTileLayerRenderer from '../../../../../src/ol/renderer/canvas/TileLayer.js';
 import TileWMS from '../../../../../src/ol/source/TileWMS.js';
+import View from '../../../../../src/ol/View.js';
 import XYZ from '../../../../../src/ol/source/XYZ.js';
-import {create as createTransform} from '../../../../../src/ol/transform.js';
+import {fromLonLat} from '../../../../../src/ol/proj.js';
 
-
-describe('ol.renderer.canvas.TileLayer', function() {
-
-  describe('#prepareFrame', function() {
-
+describe('ol.renderer.canvas.TileLayer', function () {
+  describe('#prepareFrame', function () {
     let map, target, source, tile;
-    beforeEach(function(done) {
+    beforeEach(function (done) {
       target = document.createElement('div');
       target.style.width = '100px';
       target.style.height = '100px';
       document.body.appendChild(target);
       source = new TileWMS({
         url: 'spec/ol/data/osm-0-0-0.png',
-        params: {LAYERS: 'foo', TIME: '0'}
+        params: {LAYERS: 'foo', TIME: '0'},
       });
-      source.once('tileloadend', function(e) {
+      source.once('tileloadend', function (e) {
         tile = e.tile;
         done();
       });
       map = new Map({
         target: target,
-        layers: [new TileLayer({
-          source: source
-        })],
+        layers: [
+          new TileLayer({
+            source: source,
+          }),
+        ],
         view: new View({
           zoom: 0,
-          center: [0, 0]
-        })
+          center: [0, 0],
+        }),
       });
     });
 
-    afterEach(function() {
+    afterEach(function () {
       map.setTarget(null);
       document.body.removeChild(target);
     });
 
-    it('properly handles interim tiles', function() {
+    it('properly handles interim tiles', function (done) {
       const layer = map.getLayers().item(0);
+      source.once('tileloadend', function (e) {
+        expect(e.tile.inTransition()).to.be(false);
+        done();
+      });
       source.updateParams({TIME: '1'});
       map.renderSync();
-      const tiles = map.getRenderer().getLayerRenderer(layer).renderedTiles;
+      const tiles = layer.getRenderer().renderedTiles;
       expect(tiles.length).to.be(1);
       expect(tiles[0]).to.equal(tile);
+      expect(tile.inTransition()).to.be(true);
     });
   });
 
-  describe('#composeFrame()', function() {
-
-    let img = null;
-    beforeEach(function(done) {
-      img = new Image(1, 1);
-      img.onload = function() {
-        done();
-      };
-      img.src = 'data:image/gif;base64,' +
-        'R0lGODlhAQABAPAAAP8AAP///yH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
-    });
-    afterEach(function() {
-      img = null;
-    });
-
-    it('uses correct draw scale when rotating (HiDPI)', function() {
-      const layer = new TileLayer({
+  describe('#renderFrame', function () {
+    let map, layer;
+    beforeEach(function () {
+      layer = new TileLayer({
         source: new XYZ({
-          tileSize: 1
-        })
+          cacheSize: 1,
+          url: 'rendering/ol/data/tiles/osm/{z}/{x}/{y}.png',
+        }),
       });
-      const renderer = new CanvasTileLayerRenderer(layer);
-      renderer.renderedTiles = [];
-      const frameState = {
-        viewHints: [],
-        time: Date.now(),
-        viewState: {
-          center: [10, 5],
-          projection: getProjection('EPSG:3857'),
-          resolution: 1,
-          rotation: Math.PI
-        },
-        extent: [0, 0, 20, 10],
-        size: [20, 10],
-        pixelRatio: 2,
-        coordinateToPixelTransform: createTransform(),
-        pixelToCoordinateTransform: createTransform(),
-        usedTiles: {},
-        wantedTiles: {}
-      };
-      renderer.getImageTransform = function() {
-        return createTransform();
-      };
-      MapRenderer.prototype.calculateMatrices2D(frameState);
-      const layerState = layer.getLayerState();
-      const canvas = document.createElement('canvas');
-      canvas.width = 200;
-      canvas.height = 100;
-      const context = {
-        canvas: canvas,
-        drawImage: sinon.spy()
-      };
-      renderer.renderedTiles = [{
-        getTileCoord: function() {
-          return [0, 0, 0];
-        },
-        getImage: function() {
-          return img;
-        }
-      }];
-      renderer.prepareFrame(frameState, layerState);
-      renderer.composeFrame(frameState, layerState, context);
-      expect(context.drawImage.firstCall.args[0].width).to.be(17);
+      map = new Map({
+        target: createMapDiv(100, 100),
+        layers: [layer],
+        view: new View({
+          center: fromLonLat([-122.416667, 37.783333]),
+          zoom: 5,
+        }),
+      });
+    });
+    afterEach(function () {
+      disposeMap(map);
+    });
+
+    it("respects the source's zDirection setting", function (done) {
+      layer.getSource().zDirection = 1;
+      map.getView().setZoom(5.8); // would lead to z6 tile request with the default zDirection
+      map.once('rendercomplete', function () {
+        const tileCache = layer.getSource().tileCache;
+        const keys = tileCache.getKeys();
+        expect(keys.some((key) => key.startsWith('6/'))).to.be(false);
+        done();
+      });
     });
   });
-
 });

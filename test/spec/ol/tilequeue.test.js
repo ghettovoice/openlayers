@@ -2,12 +2,10 @@ import ImageTile from '../../../src/ol/ImageTile.js';
 import Tile from '../../../src/ol/Tile.js';
 import TileQueue from '../../../src/ol/TileQueue.js';
 import TileState from '../../../src/ol/TileState.js';
-import {defaultImageLoadFunction} from '../../../src/ol/source/Image.js';
 import {DROP} from '../../../src/ol/structs/PriorityQueue.js';
+import {defaultImageLoadFunction} from '../../../src/ol/source/Image.js';
 
-
-describe('ol.TileQueue', function() {
-
+describe('ol.TileQueue', function () {
   function addRandomPriorityTiles(tq, num) {
     let i, tile, priority;
     for (i = 0; i < num; i++) {
@@ -27,19 +25,22 @@ describe('ol.TileQueue', function() {
     // The tile queue requires a unique URI for each item added.
     // Browsers still load the resource even if they don't understand
     // the charset.  So we create a unique URI by abusing the charset.
-    const src = 'data:image/gif;charset=junk-' + tileId +
-        ';base64,R0lGODlhAQABAPAAAP8AAP///' +
-        'yH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
+    const src =
+      'data:image/gif;charset=junk-' +
+      tileId +
+      ';base64,R0lGODlhAQABAPAAAP8AAP///' +
+      'yH5BAAAAAAALAAAAAABAAEAAAICRAEAOw==';
 
-    const tileLoadFunction = opt_tileLoadFunction ?
-      opt_tileLoadFunction : defaultImageLoadFunction;
+    const tileLoadFunction = opt_tileLoadFunction
+      ? opt_tileLoadFunction
+      : defaultImageLoadFunction;
     return new ImageTile(tileCoord, state, src, null, tileLoadFunction);
   }
 
-  describe('#loadMoreTiles()', function() {
-    const noop = function() {};
+  describe('#loadMoreTiles()', function () {
+    const noop = function () {};
 
-    it('works when tile queues share tiles', function(done) {
+    it('works when tile queues share tiles', function (done) {
       const q1 = new TileQueue(noop, noop);
       const q2 = new TileQueue(noop, noop);
 
@@ -73,7 +74,7 @@ describe('ol.TileQueue', function() {
       expect(q2.getCount()).to.equal(0);
 
       // let all tiles load
-      setTimeout(function() {
+      setTimeout(function () {
         expect(q1.getTilesLoading()).to.equal(0);
         expect(q2.getTilesLoading()).to.equal(0);
 
@@ -86,39 +87,21 @@ describe('ol.TileQueue', function() {
 
         done();
       }, 20);
-
     });
-
-    it('calls #tileChangeCallback_ when all wanted tiles are aborted', function() {
-      const tileChangeCallback = sinon.spy();
-      const queue = new TileQueue(noop, tileChangeCallback);
-      const numTiles = 20;
-      for (let i = 0; i < numTiles; ++i) {
-        const tile = createImageTile();
-        tile.state = TileState.ABORT;
-        queue.enqueue([tile]);
-      }
-      const maxLoading = numTiles / 2;
-      queue.loadMoreTiles(maxLoading, maxLoading);
-      expect(tileChangeCallback.callCount).to.be(1);
-    });
-
   });
 
-  describe('heapify', function() {
-    it('does convert an arbitrary array into a heap', function() {
-
-      const tq = new TileQueue(function() {});
+  describe('heapify', function () {
+    it('does convert an arbitrary array into a heap', function () {
+      const tq = new TileQueue(function () {});
       addRandomPriorityTiles(tq, 100);
 
       tq.heapify_();
     });
   });
 
-  describe('reprioritize', function() {
-    it('does reprioritize the array', function() {
-
-      const tq = new TileQueue(function() {});
+  describe('reprioritize', function () {
+    it('does reprioritize the array', function () {
+      const tq = new TileQueue(function () {});
       addRandomPriorityTiles(tq, 100);
 
       tq.heapify_();
@@ -127,8 +110,8 @@ describe('ol.TileQueue', function() {
       // rest
 
       let i = 0;
-      tq.priorityFunction_ = function() {
-        if ((i++) % 2 === 0) {
+      tq.priorityFunction_ = function () {
+        if (i++ % 2 === 0) {
           return DROP;
         }
         return Math.floor(Math.random() * 100);
@@ -137,14 +120,13 @@ describe('ol.TileQueue', function() {
       tq.reprioritize();
       expect(tq.elements_.length).to.eql(50);
       expect(tq.priorities_.length).to.eql(50);
-
     });
   });
 
-  describe('tile change event', function() {
-    const noop = function() {};
+  describe('tile change event', function () {
+    const noop = function () {};
 
-    it('abort queued tiles', function() {
+    it('loaded tiles', function () {
       const tq = new TileQueue(noop, noop);
       const tile = createImageTile();
       expect(tile.hasListener('change')).to.be(false);
@@ -152,12 +134,11 @@ describe('ol.TileQueue', function() {
       tq.enqueue([tile]);
       expect(tile.hasListener('change')).to.be(true);
 
-      tile.dispose();
+      tile.setState(TileState.LOADED);
       expect(tile.hasListener('change')).to.be(false);
-      expect(tile.getState()).to.eql(5); // ABORT
     });
 
-    it('abort loading tiles', function() {
+    it('error tiles', function () {
       const tq = new TileQueue(noop, noop);
       const tile = createImageTile(noop);
 
@@ -166,13 +147,9 @@ describe('ol.TileQueue', function() {
       expect(tq.getTilesLoading()).to.eql(1);
       expect(tile.getState()).to.eql(1); // LOADING
 
-      tile.dispose();
+      tile.setState(TileState.ERROR);
       expect(tq.getTilesLoading()).to.eql(0);
       expect(tile.hasListener('change')).to.be(false);
-      expect(tile.getState()).to.eql(5); // ABORT
-
     });
-
   });
-
 });

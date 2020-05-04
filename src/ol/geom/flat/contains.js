@@ -3,30 +3,43 @@
  */
 import {forEachCorner} from '../../extent.js';
 
-
 /**
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
  * @param {number} end End.
  * @param {number} stride Stride.
- * @param {module:ol/extent~Extent} extent Extent.
+ * @param {import("../../extent.js").Extent} extent Extent.
  * @return {boolean} Contains extent.
  */
-export function linearRingContainsExtent(flatCoordinates, offset, end, stride, extent) {
-  const outside = forEachCorner(extent,
+export function linearRingContainsExtent(
+  flatCoordinates,
+  offset,
+  end,
+  stride,
+  extent
+) {
+  const outside = forEachCorner(
+    extent,
     /**
-     * @param {module:ol/coordinate~Coordinate} coordinate Coordinate.
+     * @param {import("../../coordinate.js").Coordinate} coordinate Coordinate.
      * @return {boolean} Contains (x, y).
      */
-    function(coordinate) {
-      return !linearRingContainsXY(flatCoordinates, offset, end, stride, coordinate[0], coordinate[1]);
-    });
+    function (coordinate) {
+      return !linearRingContainsXY(
+        flatCoordinates,
+        offset,
+        end,
+        stride,
+        coordinate[0],
+        coordinate[1]
+      );
+    }
+  );
   return !outside;
 }
 
-
 /**
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
  * @param {number} end End.
  * @param {number} stride Stride.
@@ -34,7 +47,14 @@ export function linearRingContainsExtent(flatCoordinates, offset, end, stride, e
  * @param {number} y Y.
  * @return {boolean} Contains (x, y).
  */
-export function linearRingContainsXY(flatCoordinates, offset, end, stride, x, y) {
+export function linearRingContainsXY(
+  flatCoordinates,
+  offset,
+  end,
+  stride,
+  x,
+  y
+) {
   // http://geomalgorithms.com/a03-_inclusion.html
   // Copyright 2000 softSurfer, 2012 Dan Sunday
   // This code may be freely used and modified for any purpose
@@ -49,10 +69,10 @@ export function linearRingContainsXY(flatCoordinates, offset, end, stride, x, y)
     const x2 = flatCoordinates[offset];
     const y2 = flatCoordinates[offset + 1];
     if (y1 <= y) {
-      if (y2 > y && ((x2 - x1) * (y - y1)) - ((x - x1) * (y2 - y1)) > 0) {
+      if (y2 > y && (x2 - x1) * (y - y1) - (x - x1) * (y2 - y1) > 0) {
         wn++;
       }
-    } else if (y2 <= y && ((x2 - x1) * (y - y1)) - ((x - x1) * (y2 - y1)) < 0) {
+    } else if (y2 <= y && (x2 - x1) * (y - y1) - (x - x1) * (y2 - y1) < 0) {
       wn--;
     }
     x1 = x2;
@@ -61,17 +81,23 @@ export function linearRingContainsXY(flatCoordinates, offset, end, stride, x, y)
   return wn !== 0;
 }
 
-
 /**
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
- * @param {Array.<number>} ends Ends.
+ * @param {Array<number>} ends Ends.
  * @param {number} stride Stride.
  * @param {number} x X.
  * @param {number} y Y.
  * @return {boolean} Contains (x, y).
  */
-export function linearRingsContainsXY(flatCoordinates, offset, ends, stride, x, y) {
+export function linearRingsContainsXY(
+  flatCoordinates,
+  offset,
+  ends,
+  stride,
+  x,
+  y
+) {
   if (ends.length === 0) {
     return false;
   }
@@ -79,24 +105,32 @@ export function linearRingsContainsXY(flatCoordinates, offset, ends, stride, x, 
     return false;
   }
   for (let i = 1, ii = ends.length; i < ii; ++i) {
-    if (linearRingContainsXY(flatCoordinates, ends[i - 1], ends[i], stride, x, y)) {
+    if (
+      linearRingContainsXY(flatCoordinates, ends[i - 1], ends[i], stride, x, y)
+    ) {
       return false;
     }
   }
   return true;
 }
 
-
 /**
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
- * @param {Array.<Array.<number>>} endss Endss.
+ * @param {Array<Array<number>>} endss Endss.
  * @param {number} stride Stride.
  * @param {number} x X.
  * @param {number} y Y.
  * @return {boolean} Contains (x, y).
  */
-export function linearRingssContainsXY(flatCoordinates, offset, endss, stride, x, y) {
+export function linearRingssContainsXY(
+  flatCoordinates,
+  offset,
+  endss,
+  stride,
+  x,
+  y
+) {
   if (endss.length === 0) {
     return false;
   }

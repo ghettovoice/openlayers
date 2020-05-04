@@ -1,34 +1,36 @@
 /**
  * @module ol/Disposable
  */
-import {UNDEFINED} from './functions.js';
 
 /**
+ * @classdesc
  * Objects that need to clean up after themselves.
- * @constructor
  */
-const Disposable = function() {};
-
-/**
- * The object has already been disposed.
- * @type {boolean}
- * @private
- */
-Disposable.prototype.disposed_ = false;
-
-/**
- * Clean up.
- */
-Disposable.prototype.dispose = function() {
-  if (!this.disposed_) {
-    this.disposed_ = true;
-    this.disposeInternal();
+class Disposable {
+  constructor() {
+    /**
+     * The object has already been disposed.
+     * @type {boolean}
+     * @private
+     */
+    this.disposed_ = false;
   }
-};
 
-/**
- * Extension point for disposable objects.
- * @protected
- */
-Disposable.prototype.disposeInternal = UNDEFINED;
+  /**
+   * Clean up.
+   */
+  dispose() {
+    if (!this.disposed_) {
+      this.disposed_ = true;
+      this.disposeInternal();
+    }
+  }
+
+  /**
+   * Extension point for disposable objects.
+   * @protected
+   */
+  disposeInternal() {}
+}
+
 export default Disposable;

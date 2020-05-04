@@ -1,27 +1,25 @@
 /**
  * @module ol/format/filter/Not
  */
-import {inherits} from '../../index.js';
-import Filter from '../filter/Filter.js';
+import Filter from './Filter.js';
 
 /**
  * @classdesc
  * Represents a logical `<Not>` operator for a filter condition.
- *
- * @constructor
- * @param {!ol.format.filter.Filter} condition Filter condition.
- * @extends {ol.format.filter.Filter}
  * @api
  */
-const Not = function(condition) {
-
-  Filter.call(this, 'Not');
-
+class Not extends Filter {
   /**
-   * @type {!ol.format.filter.Filter}
+   * @param {!import("./Filter.js").default} condition Filter condition.
    */
-  this.condition = condition;
-};
+  constructor(condition) {
+    super('Not');
 
-inherits(Not, Filter);
+    /**
+     * @type {!import("./Filter.js").default}
+     */
+    this.condition = condition;
+  }
+}
+
 export default Not;

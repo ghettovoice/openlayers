@@ -1,30 +1,26 @@
+import DragRotateAndZoom from '../../../../src/ol/interaction/DragRotateAndZoom.js';
+import Event from '../../../../src/ol/events/Event.js';
 import Map from '../../../../src/ol/Map.js';
 import MapBrowserPointerEvent from '../../../../src/ol/MapBrowserPointerEvent.js';
-import View from '../../../../src/ol/View.js';
-import DragRotateAndZoom from '../../../../src/ol/interaction/DragRotateAndZoom.js';
 import VectorLayer from '../../../../src/ol/layer/Vector.js';
-import PointerEvent from '../../../../src/ol/pointer/PointerEvent.js';
 import VectorSource from '../../../../src/ol/source/Vector.js';
+import View from '../../../../src/ol/View.js';
 
-describe('ol.interaction.DragRotateAndZoom', function() {
-
-  describe('constructor', function() {
-
-    it('can be constructed without arguments', function() {
+describe('ol.interaction.DragRotateAndZoom', function () {
+  describe('constructor', function () {
+    it('can be constructed without arguments', function () {
       const instance = new DragRotateAndZoom();
       expect(instance).to.be.an(DragRotateAndZoom);
     });
-
   });
 
-  describe('#handleDragEvent_()', function() {
-
+  describe('#handleDragEvent()', function () {
     let target, map, interaction;
 
     const width = 360;
     const height = 180;
 
-    beforeEach(function(done) {
+    beforeEach(function (done) {
       target = document.createElement('div');
       const style = target.style;
       style.position = 'absolute';
@@ -43,49 +39,69 @@ describe('ol.interaction.DragRotateAndZoom', function() {
         view: new View({
           projection: 'EPSG:4326',
           center: [0, 0],
-          resolution: 1
-        })
+          resolution: 1,
+        }),
       });
-      map.once('postrender', function() {
+      map.once('postrender', function () {
         done();
       });
     });
 
-    afterEach(function() {
+    afterEach(function () {
       map.dispose();
       document.body.removeChild(target);
     });
 
-    it('does not rotate when rotation is disabled on the view', function() {
-      let event = new MapBrowserPointerEvent('pointermove', map,
-        new PointerEvent('pointermove', {clientX: 20, clientY: 10}, {pointerType: 'mouse'}),
-        true);
+    it('does not rotate when rotation is disabled on the view', function () {
+      const pointerEvent = new Event();
+      pointerEvent.type = 'pointermove';
+      pointerEvent.clientX = 20;
+      pointerEvent.clientY = 10;
+      pointerEvent.pointerType = 'mouse';
+      let event = new MapBrowserPointerEvent(
+        'pointermove',
+        map,
+        pointerEvent,
+        true
+      );
       interaction.lastAngle_ = Math.PI;
 
-      let view = map.getView();
-      let spy = sinon.spy(view, 'rotate');
-      interaction.handleDragEvent_(event);
-      expect(spy.callCount).to.be(1);
-      expect(interaction.lastAngle_).to.be(-0.8308214428190254);
-      view.rotate.restore();
+      let callCount = 0;
 
+      let view = map.getView();
+      view.on('change:rotation', function () {
+        callCount++;
+      });
+
+      interaction.handleDragEvent(event);
+      expect(callCount).to.be(1);
+      expect(interaction.lastAngle_).to.be(-0.8308214428190254);
+
+      callCount = 0;
       view = new View({
         projection: 'EPSG:4326',
         center: [0, 0],
         resolution: 1,
-        enableRotation: false
+        enableRotation: false,
       });
       map.setView(view);
+      view.on('change:rotation', function () {
+        callCount++;
+      });
 
-      event = new MapBrowserPointerEvent('pointermove', map,
-        new PointerEvent('pointermove', {clientX: 24, clientY: 16}, {pointerType: 'mouse'}),
-        true);
+      pointerEvent.type = 'pointermove';
+      pointerEvent.clientX = 24;
+      pointerEvent.clientY = 16;
+      pointerEvent.pointerType = 'mouse';
+      event = new MapBrowserPointerEvent(
+        'pointermove',
+        map,
+        pointerEvent,
+        true
+      );
 
-      spy = sinon.spy(view, 'rotate');
-      interaction.handleDragEvent_(event);
-      expect(spy.callCount).to.be(0);
-      view.rotate.restore();
+      interaction.handleDragEvent(event);
+      expect(callCount).to.be(0);
     });
   });
-
 });

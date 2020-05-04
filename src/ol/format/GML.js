@@ -1,7 +1,7 @@
 /**
  * @module ol/format/GML
  */
-import GML3 from '../format/GML3.js';
+import GML3 from './GML3.js';
 
 /**
  * @classdesc
@@ -9,33 +9,29 @@ import GML3 from '../format/GML3.js';
  * version 3.1.1.
  * Currently only supports GML 3.1.1 Simple Features profile.
  *
- * @constructor
- * @param {module:ol/format/GMLBase~Options=} opt_options
+ * @param {import("./GMLBase.js").Options=} opt_options
  *     Optional configuration object.
- * @extends {ol.format.GMLBase}
  * @api
  */
 const GML = GML3;
-
 
 /**
  * Encode an array of features in GML 3.1.1 Simple Features.
  *
  * @function
- * @param {Array.<module:ol/Feature~Feature>} features Features.
- * @param {module:ol/format/Feature~WriteOptions=} opt_options Options.
+ * @param {Array<import("../Feature.js").default>} features Features.
+ * @param {import("./Feature.js").WriteOptions=} opt_options Options.
  * @return {string} Result.
  * @api
  */
 GML.prototype.writeFeatures;
 
-
 /**
  * Encode an array of features in the GML 3.1.1 format as an XML node.
  *
  * @function
- * @param {Array.<module:ol/Feature~Feature>} features Features.
- * @param {module:ol/format/Feature~WriteOptions=} opt_options Options.
+ * @param {Array<import("../Feature.js").default>} features Features.
+ * @param {import("./Feature.js").WriteOptions=} opt_options Options.
  * @return {Node} Node.
  * @api
  */

@@ -1,55 +1,126 @@
 /**
  * @module ol/format/WFS
  */
-import {inherits} from '../index.js';
+import GML2 from './GML2.js';
+import GML3 from './GML3.js';
+import GMLBase, {GMLNS} from './GMLBase.js';
+import XMLFeature from './XMLFeature.js';
+import {
+  XML_SCHEMA_INSTANCE_URI,
+  createElementNS,
+  isDocument,
+  makeArrayPusher,
+  makeChildAppender,
+  makeObjectPropertySetter,
+  makeSimpleNodeFactory,
+  parse,
+  parseNode,
+  pushParseAndPop,
+  pushSerializeAndPop,
+} from '../xml.js';
+import {and as andFilter, bbox as bboxFilter} from './filter.js';
 import {assert} from '../asserts.js';
-import GML2 from '../format/GML2.js';
-import GML3 from '../format/GML3.js';
-import GMLBase, {GMLNS} from '../format/GMLBase.js';
-import {and as andFilter, bbox as bboxFilter} from '../format/filter.js';
-import XMLFeature from '../format/XMLFeature.js';
-import {readNonNegativeIntegerString, readNonNegativeInteger, writeStringTextNode} from '../format/xsd.js';
-import Geometry from '../geom/Geometry.js';
 import {assign} from '../obj.js';
 import {get as getProjection} from '../proj.js';
-import {createElementNS, isDocument, isNode, makeArrayPusher, makeChildAppender,
-  makeObjectPropertySetter, makeSimpleNodeFactory, parse, parseNode,
-  pushParseAndPop, pushSerializeAndPop, XML_SCHEMA_INSTANCE_URI} from '../xml.js';
+import {
+  readNonNegativeInteger,
+  readNonNegativeIntegerString,
+  writeStringTextNode,
+} from './xsd.js';
 
+/**
+ * @const
+ * @type {Object<string, Object<string, import("../xml.js").Parser>>}
+ */
+const FEATURE_COLLECTION_PARSERS = {
+  'http://www.opengis.net/gml': {
+    'boundedBy': makeObjectPropertySetter(
+      GMLBase.prototype.readGeometryElement,
+      'bounds'
+    ),
+  },
+};
+
+/**
+ * @const
+ * @type {Object<string, Object<string, import("../xml.js").Parser>>}
+ */
+const TRANSACTION_SUMMARY_PARSERS = {
+  'http://www.opengis.net/wfs': {
+    'totalInserted': makeObjectPropertySetter(readNonNegativeInteger),
+    'totalUpdated': makeObjectPropertySetter(readNonNegativeInteger),
+    'totalDeleted': makeObjectPropertySetter(readNonNegativeInteger),
+  },
+};
+
+/**
+ * @const
+ * @type {Object<string, Object<string, import("../xml.js").Parser>>}
+ */
+const TRANSACTION_RESPONSE_PARSERS = {
+  'http://www.opengis.net/wfs': {
+    'TransactionSummary': makeObjectPropertySetter(
+      readTransactionSummary,
+      'transactionSummary'
+    ),
+    'InsertResults': makeObjectPropertySetter(readInsertResults, 'insertIds'),
+  },
+};
+
+/**
+ * @type {Object<string, Object<string, import("../xml.js").Serializer>>}
+ */
+const QUERY_SERIALIZERS = {
+  'http://www.opengis.net/wfs': {
+    'PropertyName': makeChildAppender(writeStringTextNode),
+  },
+};
+
+/**
+ * @type {Object<string, Object<string, import("../xml.js").Serializer>>}
+ */
+const TRANSACTION_SERIALIZERS = {
+  'http://www.opengis.net/wfs': {
+    'Insert': makeChildAppender(writeFeature),
+    'Update': makeChildAppender(writeUpdate),
+    'Delete': makeChildAppender(writeDelete),
+    'Property': makeChildAppender(writeProperty),
+    'Native': makeChildAppender(writeNative),
+  },
+};
 
 /**
  * @typedef {Object} Options
- * @property {Object.<string, string>|string} [featureNS] The namespace URI used for features.
- * @property {Array.<string>|string} [featureType] The feature type to parse. Only used for read operations.
- * @property {module:ol/format/GMLBase~GMLBase} [gmlFormat] The GML format to use to parse the response. Default is `ol.format.GML3`.
+ * @property {Object<string, string>|string} [featureNS] The namespace URI used for features.
+ * @property {Array<string>|string} [featureType] The feature type to parse. Only used for read operations.
+ * @property {GMLBase} [gmlFormat] The GML format to use to parse the response. Default is `ol/format/GML3`.
  * @property {string} [schemaLocation] Optional schemaLocation to use for serialization, this will override the default.
  */
-
 
 /**
  * @typedef {Object} WriteGetFeatureOptions
  * @property {string} featureNS The namespace URI used for features.
  * @property {string} featurePrefix The prefix for the feature namespace.
- * @property {Array.<string>} featureTypes The feature type names.
+ * @property {Array<string>} featureTypes The feature type names.
  * @property {string} [srsName] SRS name. No srsName attribute will be set on
  * geometries when this is not provided.
  * @property {string} [handle] Handle.
  * @property {string} [outputFormat] Output format.
  * @property {number} [maxFeatures] Maximum number of features to fetch.
  * @property {string} [geometryName] Geometry name to use in a BBOX filter.
- * @property {Array.<string>} [propertyNames] Optional list of property names to serialize.
+ * @property {Array<string>} [propertyNames] Optional list of property names to serialize.
+ * @property {string} [viewParams] viewParams GeoServer vendor parameter.
  * @property {number} [startIndex] Start index to use for WFS paging. This is a
  * WFS 2.0 feature backported to WFS 1.1.0 by some Web Feature Services.
  * @property {number} [count] Number of features to retrieve when paging. This is a
  * WFS 2.0 feature backported to WFS 1.1.0 by some Web Feature Services. Please note that some
  * Web Feature Services have repurposed `maxfeatures` instead.
- * @property {module:ol/extent~Extent} [bbox] Extent to use for the BBOX filter.
- * @property {ol.format.filter.Filter} [filter] Filter condition. See
- * {@link ol.format.filter} for more information.
+ * @property {import("../extent.js").Extent} [bbox] Extent to use for the BBOX filter.
+ * @property {import("./filter/Filter.js").default} [filter] Filter condition. See
+ * {@link module:ol/format/Filter} for more information.
  * @property {string} [resultType] Indicates what response should be returned,
  * E.g. `hits` only includes the `numberOfFeatures` attribute in the response and no features.
  */
-
 
 /**
  * @typedef {Object} WriteTransactionOptions
@@ -61,50 +132,61 @@ import {createElementNS, isDocument, isNode, makeArrayPusher, makeChildAppender,
  * @property {string} [handle] Handle.
  * @property {boolean} [hasZ] Must be set to true if the transaction is for
  * a 3D layer. This will allow the Z coordinate to be included in the transaction.
- * @property {Array.<Object>} nativeElements Native elements. Currently not supported.
- * @property {module:ol/format/GMLBase~Options} [gmlOptions] GML options for the WFS transaction writer.
+ * @property {Array<Object>} nativeElements Native elements. Currently not supported.
+ * @property {import("./GMLBase.js").Options} [gmlOptions] GML options for the WFS transaction writer.
  * @property {string} [version='1.1.0'] WFS version to use for the transaction. Can be either `1.0.0` or `1.1.0`.
  */
 
+/**
+ * Number of features; bounds/extent.
+ * @typedef {Object} FeatureCollectionMetadata
+ * @property {number} numberOfFeatures
+ * @property {import("../extent.js").Extent} bounds
+ */
+
+/**
+ * Total deleted; total inserted; total updated; array of insert ids.
+ * @typedef {Object} TransactionResponse
+ * @property {number} totalDeleted
+ * @property {number} totalInserted
+ * @property {number} totalUpdated
+ * @property {Array<string>} insertIds
+ */
 
 /**
  * @type {string}
  */
 const FEATURE_PREFIX = 'feature';
 
-
 /**
  * @type {string}
  */
 const XMLNS = 'http://www.w3.org/2000/xmlns/';
-
 
 /**
  * @type {string}
  */
 const OGCNS = 'http://www.opengis.net/ogc';
 
-
 /**
  * @type {string}
  */
 const WFSNS = 'http://www.opengis.net/wfs';
-
 
 /**
  * @type {string}
  */
 const FESNS = 'http://www.opengis.net/fes';
 
-
 /**
- * @type {Object.<string, string>}
+ * @type {Object<string, string>}
  */
 const SCHEMA_LOCATIONS = {
-  '1.1.0': 'http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.1.0/wfs.xsd',
-  '1.0.0': 'http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/wfs.xsd'
+  '1.1.0':
+    'http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.1.0/wfs.xsd',
+  '1.0.0':
+    'http://www.opengis.net/wfs http://schemas.opengis.net/wfs/1.0.0/wfs.xsd',
 };
-
 
 /**
  * @const
@@ -112,315 +194,489 @@ const SCHEMA_LOCATIONS = {
  */
 const DEFAULT_VERSION = '1.1.0';
 
-
 /**
  * @classdesc
  * Feature format for reading and writing data in the WFS format.
  * By default, supports WFS version 1.1.0. You can pass a GML format
  * as option if you want to read a WFS that contains GML2 (WFS 1.0.0).
- * Also see {@link ol.format.GMLBase} which is used by this format.
+ * Also see {@link module:ol/format/GMLBase~GMLBase} which is used by this format.
  *
- * @constructor
- * @param {module:ol/format/WFS~Options=} opt_options Optional configuration object.
- * @extends {module:ol/format/XMLFeature~XMLFeature}
  * @api
  */
-const WFS = function(opt_options) {
-  const options = opt_options ? opt_options : {};
-
+class WFS extends XMLFeature {
   /**
-   * @private
-   * @type {Array.<string>|string|undefined}
+   * @param {Options=} opt_options Optional configuration object.
    */
-  this.featureType_ = options.featureType;
+  constructor(opt_options) {
+    super();
 
-  /**
-   * @private
-   * @type {Object.<string, string>|string|undefined}
-   */
-  this.featureNS_ = options.featureNS;
+    const options = opt_options ? opt_options : {};
 
-  /**
-   * @private
-   * @type {ol.format.GMLBase}
-   */
-  this.gmlFormat_ = options.gmlFormat ?
-    options.gmlFormat : new GML3();
+    /**
+     * @private
+     * @type {Array<string>|string|undefined}
+     */
+    this.featureType_ = options.featureType;
 
-  /**
-   * @private
-   * @type {string}
-   */
-  this.schemaLocation_ = options.schemaLocation ?
-    options.schemaLocation : SCHEMA_LOCATIONS[DEFAULT_VERSION];
+    /**
+     * @private
+     * @type {Object<string, string>|string|undefined}
+     */
+    this.featureNS_ = options.featureNS;
 
-  XMLFeature.call(this);
-};
+    /**
+     * @private
+     * @type {GMLBase}
+     */
+    this.gmlFormat_ = options.gmlFormat ? options.gmlFormat : new GML3();
 
-inherits(WFS, XMLFeature);
-
-
-/**
- * @return {Array.<string>|string|undefined} featureType
- */
-WFS.prototype.getFeatureType = function() {
-  return this.featureType_;
-};
-
-
-/**
- * @param {Array.<string>|string|undefined} featureType Feature type(s) to parse.
- */
-WFS.prototype.setFeatureType = function(featureType) {
-  this.featureType_ = featureType;
-};
-
-
-/**
- * Read all features from a WFS FeatureCollection.
- *
- * @function
- * @param {Document|Node|Object|string} source Source.
- * @param {module:ol/format/Feature~ReadOptions=} opt_options Read options.
- * @return {Array.<module:ol/Feature~Feature>} Features.
- * @api
- */
-WFS.prototype.readFeatures;
-
-
-/**
- * @inheritDoc
- */
-WFS.prototype.readFeaturesFromNode = function(node, opt_options) {
-  const context = /** @type {module:ol/xml~NodeStackItem} */ ({
-    'featureType': this.featureType_,
-    'featureNS': this.featureNS_
-  });
-  assign(context, this.getReadOptions(node, opt_options ? opt_options : {}));
-  const objectStack = [context];
-  this.gmlFormat_.FEATURE_COLLECTION_PARSERS[GMLNS][
-    'featureMember'] =
-      makeArrayPusher(GMLBase.prototype.readFeaturesInternal);
-  let features = pushParseAndPop([],
-    this.gmlFormat_.FEATURE_COLLECTION_PARSERS, node,
-    objectStack, this.gmlFormat_);
-  if (!features) {
-    features = [];
+    /**
+     * @private
+     * @type {string}
+     */
+    this.schemaLocation_ = options.schemaLocation
+      ? options.schemaLocation
+      : SCHEMA_LOCATIONS[DEFAULT_VERSION];
   }
-  return features;
-};
 
-
-/**
- * Read transaction response of the source.
- *
- * @param {Document|Node|Object|string} source Source.
- * @return {ol.WFSTransactionResponse|undefined} Transaction response.
- * @api
- */
-WFS.prototype.readTransactionResponse = function(source) {
-  if (isDocument(source)) {
-    return this.readTransactionResponseFromDocument(
-      /** @type {Document} */ (source));
-  } else if (isNode(source)) {
-    return this.readTransactionResponseFromNode(/** @type {Node} */ (source));
-  } else if (typeof source === 'string') {
-    const doc = parse(source);
-    return this.readTransactionResponseFromDocument(doc);
-  } else {
-    return undefined;
+  /**
+   * @return {Array<string>|string|undefined} featureType
+   */
+  getFeatureType() {
+    return this.featureType_;
   }
-};
 
-
-/**
- * Read feature collection metadata of the source.
- *
- * @param {Document|Node|Object|string} source Source.
- * @return {ol.WFSFeatureCollectionMetadata|undefined}
- *     FeatureCollection metadata.
- * @api
- */
-WFS.prototype.readFeatureCollectionMetadata = function(source) {
-  if (isDocument(source)) {
-    return this.readFeatureCollectionMetadataFromDocument(
-      /** @type {Document} */ (source));
-  } else if (isNode(source)) {
-    return this.readFeatureCollectionMetadataFromNode(
-      /** @type {Node} */ (source));
-  } else if (typeof source === 'string') {
-    const doc = parse(source);
-    return this.readFeatureCollectionMetadataFromDocument(doc);
-  } else {
-    return undefined;
+  /**
+   * @param {Array<string>|string|undefined} featureType Feature type(s) to parse.
+   */
+  setFeatureType(featureType) {
+    this.featureType_ = featureType;
   }
-};
 
+  /**
+   * @protected
+   * @param {Element} node Node.
+   * @param {import("./Feature.js").ReadOptions=} opt_options Options.
+   * @return {Array<import("../Feature.js").default>} Features.
+   */
+  readFeaturesFromNode(node, opt_options) {
+    /** @type {import("../xml.js").NodeStackItem} */
+    const context = {
+      node: node,
+    };
+    assign(context, {
+      'featureType': this.featureType_,
+      'featureNS': this.featureNS_,
+    });
 
-/**
- * @param {Document} doc Document.
- * @return {ol.WFSFeatureCollectionMetadata|undefined}
- *     FeatureCollection metadata.
- */
-WFS.prototype.readFeatureCollectionMetadataFromDocument = function(doc) {
-  for (let n = doc.firstChild; n; n = n.nextSibling) {
-    if (n.nodeType == Node.ELEMENT_NODE) {
-      return this.readFeatureCollectionMetadataFromNode(n);
+    assign(context, this.getReadOptions(node, opt_options ? opt_options : {}));
+    const objectStack = [context];
+    this.gmlFormat_.FEATURE_COLLECTION_PARSERS[GMLNS][
+      'featureMember'
+    ] = makeArrayPusher(GMLBase.prototype.readFeaturesInternal);
+    let features = pushParseAndPop(
+      [],
+      this.gmlFormat_.FEATURE_COLLECTION_PARSERS,
+      node,
+      objectStack,
+      this.gmlFormat_
+    );
+    if (!features) {
+      features = [];
+    }
+    return features;
+  }
+
+  /**
+   * Read transaction response of the source.
+   *
+   * @param {Document|Element|Object|string} source Source.
+   * @return {TransactionResponse|undefined} Transaction response.
+   * @api
+   */
+  readTransactionResponse(source) {
+    if (!source) {
+      return undefined;
+    } else if (typeof source === 'string') {
+      const doc = parse(source);
+      return this.readTransactionResponseFromDocument(doc);
+    } else if (isDocument(source)) {
+      return this.readTransactionResponseFromDocument(
+        /** @type {Document} */ (source)
+      );
+    } else {
+      return this.readTransactionResponseFromNode(
+        /** @type {Element} */ (source)
+      );
     }
   }
-  return undefined;
-};
 
-
-/**
- * @const
- * @type {Object.<string, Object.<string, module:ol/xml~Parser>>}
- */
-const FEATURE_COLLECTION_PARSERS = {
-  'http://www.opengis.net/gml': {
-    'boundedBy': makeObjectPropertySetter(
-      GMLBase.prototype.readGeometryElement, 'bounds')
+  /**
+   * Read feature collection metadata of the source.
+   *
+   * @param {Document|Element|Object|string} source Source.
+   * @return {FeatureCollectionMetadata|undefined}
+   *     FeatureCollection metadata.
+   * @api
+   */
+  readFeatureCollectionMetadata(source) {
+    if (!source) {
+      return undefined;
+    } else if (typeof source === 'string') {
+      const doc = parse(source);
+      return this.readFeatureCollectionMetadataFromDocument(doc);
+    } else if (isDocument(source)) {
+      return this.readFeatureCollectionMetadataFromDocument(
+        /** @type {Document} */ (source)
+      );
+    } else {
+      return this.readFeatureCollectionMetadataFromNode(
+        /** @type {Element} */ (source)
+      );
+    }
   }
-};
 
-
-/**
- * @param {Node} node Node.
- * @return {ol.WFSFeatureCollectionMetadata|undefined}
- *     FeatureCollection metadata.
- */
-WFS.prototype.readFeatureCollectionMetadataFromNode = function(node) {
-  const result = {};
-  const value = readNonNegativeIntegerString(
-    node.getAttribute('numberOfFeatures'));
-  result['numberOfFeatures'] = value;
-  return pushParseAndPop(
-    /** @type {ol.WFSFeatureCollectionMetadata} */ (result),
-    FEATURE_COLLECTION_PARSERS, node, [], this.gmlFormat_);
-};
-
-
-/**
- * @const
- * @type {Object.<string, Object.<string, module:ol/xml~Parser>>}
- */
-const TRANSACTION_SUMMARY_PARSERS = {
-  'http://www.opengis.net/wfs': {
-    'totalInserted': makeObjectPropertySetter(readNonNegativeInteger),
-    'totalUpdated': makeObjectPropertySetter(readNonNegativeInteger),
-    'totalDeleted': makeObjectPropertySetter(readNonNegativeInteger)
+  /**
+   * @param {Document} doc Document.
+   * @return {FeatureCollectionMetadata|undefined}
+   *     FeatureCollection metadata.
+   */
+  readFeatureCollectionMetadataFromDocument(doc) {
+    for (let n = /** @type {Node} */ (doc.firstChild); n; n = n.nextSibling) {
+      if (n.nodeType == Node.ELEMENT_NODE) {
+        return this.readFeatureCollectionMetadataFromNode(
+          /** @type {Element} */ (n)
+        );
+      }
+    }
+    return undefined;
   }
-};
 
+  /**
+   * @param {Element} node Node.
+   * @return {FeatureCollectionMetadata|undefined}
+   *     FeatureCollection metadata.
+   */
+  readFeatureCollectionMetadataFromNode(node) {
+    const result = {};
+    const value = readNonNegativeIntegerString(
+      node.getAttribute('numberOfFeatures')
+    );
+    result['numberOfFeatures'] = value;
+    return pushParseAndPop(
+      /** @type {FeatureCollectionMetadata} */ (result),
+      FEATURE_COLLECTION_PARSERS,
+      node,
+      [],
+      this.gmlFormat_
+    );
+  }
+
+  /**
+   * @param {Document} doc Document.
+   * @return {TransactionResponse|undefined} Transaction response.
+   */
+  readTransactionResponseFromDocument(doc) {
+    for (let n = /** @type {Node} */ (doc.firstChild); n; n = n.nextSibling) {
+      if (n.nodeType == Node.ELEMENT_NODE) {
+        return this.readTransactionResponseFromNode(/** @type {Element} */ (n));
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * @param {Element} node Node.
+   * @return {TransactionResponse|undefined} Transaction response.
+   */
+  readTransactionResponseFromNode(node) {
+    return pushParseAndPop(
+      /** @type {TransactionResponse} */ ({}),
+      TRANSACTION_RESPONSE_PARSERS,
+      node,
+      []
+    );
+  }
+
+  /**
+   * Encode format as WFS `GetFeature` and return the Node.
+   *
+   * @param {WriteGetFeatureOptions} options Options.
+   * @return {Node} Result.
+   * @api
+   */
+  writeGetFeature(options) {
+    const node = createElementNS(WFSNS, 'GetFeature');
+    node.setAttribute('service', 'WFS');
+    node.setAttribute('version', '1.1.0');
+    let filter;
+    if (options) {
+      if (options.handle) {
+        node.setAttribute('handle', options.handle);
+      }
+      if (options.outputFormat) {
+        node.setAttribute('outputFormat', options.outputFormat);
+      }
+      if (options.maxFeatures !== undefined) {
+        node.setAttribute('maxFeatures', String(options.maxFeatures));
+      }
+      if (options.resultType) {
+        node.setAttribute('resultType', options.resultType);
+      }
+      if (options.startIndex !== undefined) {
+        node.setAttribute('startIndex', String(options.startIndex));
+      }
+      if (options.count !== undefined) {
+        node.setAttribute('count', String(options.count));
+      }
+      if (options.viewParams !== undefined) {
+        node.setAttribute('viewParams', options.viewParams);
+      }
+      filter = options.filter;
+      if (options.bbox) {
+        assert(options.geometryName, 12); // `options.geometryName` must also be provided when `options.bbox` is set
+        const bbox = bboxFilter(
+          /** @type {string} */ (options.geometryName),
+          options.bbox,
+          options.srsName
+        );
+        if (filter) {
+          // if bbox and filter are both set, combine the two into a single filter
+          filter = andFilter(filter, bbox);
+        } else {
+          filter = bbox;
+        }
+      }
+    }
+    node.setAttributeNS(
+      XML_SCHEMA_INSTANCE_URI,
+      'xsi:schemaLocation',
+      this.schemaLocation_
+    );
+    /** @type {import("../xml.js").NodeStackItem} */
+    const context = {
+      node: node,
+    };
+    assign(context, {
+      'srsName': options.srsName,
+      'featureNS': options.featureNS ? options.featureNS : this.featureNS_,
+      'featurePrefix': options.featurePrefix,
+      'geometryName': options.geometryName,
+      'filter': filter,
+      'propertyNames': options.propertyNames ? options.propertyNames : [],
+    });
+
+    assert(Array.isArray(options.featureTypes), 11); // `options.featureTypes` should be an Array
+    writeGetFeature(
+      node,
+      /** @type {!Array<string>} */ (options.featureTypes),
+      [context]
+    );
+    return node;
+  }
+
+  /**
+   * Encode format as WFS `Transaction` and return the Node.
+   *
+   * @param {Array<import("../Feature.js").default>} inserts The features to insert.
+   * @param {Array<import("../Feature.js").default>} updates The features to update.
+   * @param {Array<import("../Feature.js").default>} deletes The features to delete.
+   * @param {WriteTransactionOptions} options Write options.
+   * @return {Node} Result.
+   * @api
+   */
+  writeTransaction(inserts, updates, deletes, options) {
+    const objectStack = [];
+    const node = createElementNS(WFSNS, 'Transaction');
+    const version = options.version ? options.version : DEFAULT_VERSION;
+    const gmlVersion = version === '1.0.0' ? 2 : 3;
+    node.setAttribute('service', 'WFS');
+    node.setAttribute('version', version);
+    let baseObj;
+    /** @type {import("../xml.js").NodeStackItem} */
+    let obj;
+    if (options) {
+      baseObj = options.gmlOptions ? options.gmlOptions : {};
+      if (options.handle) {
+        node.setAttribute('handle', options.handle);
+      }
+    }
+    const schemaLocation = SCHEMA_LOCATIONS[version];
+    node.setAttributeNS(
+      XML_SCHEMA_INSTANCE_URI,
+      'xsi:schemaLocation',
+      schemaLocation
+    );
+    const featurePrefix = options.featurePrefix
+      ? options.featurePrefix
+      : FEATURE_PREFIX;
+    if (inserts) {
+      obj = assign(
+        {node: node},
+        {
+          'featureNS': options.featureNS,
+          'featureType': options.featureType,
+          'featurePrefix': featurePrefix,
+          'gmlVersion': gmlVersion,
+          'hasZ': options.hasZ,
+          'srsName': options.srsName,
+        }
+      );
+      assign(obj, baseObj);
+      pushSerializeAndPop(
+        obj,
+        TRANSACTION_SERIALIZERS,
+        makeSimpleNodeFactory('Insert'),
+        inserts,
+        objectStack
+      );
+    }
+    if (updates) {
+      obj = assign(
+        {node: node},
+        {
+          'featureNS': options.featureNS,
+          'featureType': options.featureType,
+          'featurePrefix': featurePrefix,
+          'gmlVersion': gmlVersion,
+          'hasZ': options.hasZ,
+          'srsName': options.srsName,
+        }
+      );
+      assign(obj, baseObj);
+      pushSerializeAndPop(
+        obj,
+        TRANSACTION_SERIALIZERS,
+        makeSimpleNodeFactory('Update'),
+        updates,
+        objectStack
+      );
+    }
+    if (deletes) {
+      pushSerializeAndPop(
+        {
+          node: node,
+          'featureNS': options.featureNS,
+          'featureType': options.featureType,
+          'featurePrefix': featurePrefix,
+          'gmlVersion': gmlVersion,
+          'srsName': options.srsName,
+        },
+        TRANSACTION_SERIALIZERS,
+        makeSimpleNodeFactory('Delete'),
+        deletes,
+        objectStack
+      );
+    }
+    if (options.nativeElements) {
+      pushSerializeAndPop(
+        {
+          node: node,
+          'featureNS': options.featureNS,
+          'featureType': options.featureType,
+          'featurePrefix': featurePrefix,
+          'gmlVersion': gmlVersion,
+          'srsName': options.srsName,
+        },
+        TRANSACTION_SERIALIZERS,
+        makeSimpleNodeFactory('Native'),
+        options.nativeElements,
+        objectStack
+      );
+    }
+    return node;
+  }
+
+  /**
+   * @param {Document} doc Document.
+   * @return {import("../proj/Projection.js").default} Projection.
+   */
+  readProjectionFromDocument(doc) {
+    for (let n = doc.firstChild; n; n = n.nextSibling) {
+      if (n.nodeType == Node.ELEMENT_NODE) {
+        return this.readProjectionFromNode(/** @type {Element} */ (n));
+      }
+    }
+    return null;
+  }
+
+  /**
+   * @param {Element} node Node.
+   * @return {import("../proj/Projection.js").default} Projection.
+   */
+  readProjectionFromNode(node) {
+    if (node.firstElementChild && node.firstElementChild.firstElementChild) {
+      node = node.firstElementChild.firstElementChild;
+      for (let n = node.firstElementChild; n; n = n.nextElementSibling) {
+        if (
+          !(
+            n.childNodes.length === 0 ||
+            (n.childNodes.length === 1 && n.firstChild.nodeType === 3)
+          )
+        ) {
+          const objectStack = [{}];
+          this.gmlFormat_.readGeometryElement(n, objectStack);
+          return getProjection(objectStack.pop().srsName);
+        }
+      }
+    }
+
+    return null;
+  }
+}
 
 /**
- * @param {Node} node Node.
- * @param {Array.<*>} objectStack Object stack.
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
  * @return {Object|undefined} Transaction Summary.
  */
 function readTransactionSummary(node, objectStack) {
-  return pushParseAndPop(
-    {}, TRANSACTION_SUMMARY_PARSERS, node, objectStack);
+  return pushParseAndPop({}, TRANSACTION_SUMMARY_PARSERS, node, objectStack);
 }
-
 
 /**
  * @const
- * @type {Object.<string, Object.<string, module:ol/xml~Parser>>}
+ * @type {Object<string, Object<string, import("../xml.js").Parser>>}
  */
 const OGC_FID_PARSERS = {
   'http://www.opengis.net/ogc': {
-    'FeatureId': makeArrayPusher(function(node, objectStack) {
+    'FeatureId': makeArrayPusher(function (node, objectStack) {
       return node.getAttribute('fid');
-    })
-  }
+    }),
+  },
 };
 
-
 /**
- * @param {Node} node Node.
- * @param {Array.<*>} objectStack Object stack.
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
  */
 function fidParser(node, objectStack) {
   parseNode(OGC_FID_PARSERS, node, objectStack);
 }
 
-
 /**
  * @const
- * @type {Object.<string, Object.<string, module:ol/xml~Parser>>}
+ * @type {Object<string, Object<string, import("../xml.js").Parser>>}
  */
 const INSERT_RESULTS_PARSERS = {
   'http://www.opengis.net/wfs': {
-    'Feature': fidParser
-  }
+    'Feature': fidParser,
+  },
 };
 
-
 /**
- * @param {Node} node Node.
- * @param {Array.<*>} objectStack Object stack.
- * @return {Array.<string>|undefined} Insert results.
+ * @param {Element} node Node.
+ * @param {Array<*>} objectStack Object stack.
+ * @return {Array<string>|undefined} Insert results.
  */
 function readInsertResults(node, objectStack) {
-  return pushParseAndPop(
-    [], INSERT_RESULTS_PARSERS, node, objectStack);
+  return pushParseAndPop([], INSERT_RESULTS_PARSERS, node, objectStack);
 }
 
-
 /**
- * @const
- * @type {Object.<string, Object.<string, module:ol/xml~Parser>>}
- */
-const TRANSACTION_RESPONSE_PARSERS = {
-  'http://www.opengis.net/wfs': {
-    'TransactionSummary': makeObjectPropertySetter(
-      readTransactionSummary, 'transactionSummary'),
-    'InsertResults': makeObjectPropertySetter(
-      readInsertResults, 'insertIds')
-  }
-};
-
-
-/**
- * @param {Document} doc Document.
- * @return {ol.WFSTransactionResponse|undefined} Transaction response.
- */
-WFS.prototype.readTransactionResponseFromDocument = function(doc) {
-  for (let n = doc.firstChild; n; n = n.nextSibling) {
-    if (n.nodeType == Node.ELEMENT_NODE) {
-      return this.readTransactionResponseFromNode(n);
-    }
-  }
-  return undefined;
-};
-
-
-/**
- * @param {Node} node Node.
- * @return {ol.WFSTransactionResponse|undefined} Transaction response.
- */
-WFS.prototype.readTransactionResponseFromNode = function(node) {
-  return pushParseAndPop(
-    /** @type {ol.WFSTransactionResponse} */({}),
-    TRANSACTION_RESPONSE_PARSERS, node, []);
-};
-
-
-/**
- * @type {Object.<string, Object.<string, module:ol/xml~Serializer>>}
- */
-const QUERY_SERIALIZERS = {
-  'http://www.opengis.net/wfs': {
-    'PropertyName': makeChildAppender(writeStringTextNode)
-  }
-};
-
-
-/**
- * @param {Node} node Node.
- * @param {module:ol/Feature~Feature} feature Feature.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {Element} node Node.
+ * @param {import("../Feature.js").default} feature Feature.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeFeature(node, feature, objectStack) {
   const context = objectStack[objectStack.length - 1];
@@ -436,20 +692,18 @@ function writeFeature(node, feature, objectStack) {
   }
 }
 
-
 /**
  * @param {Node} node Node.
  * @param {number|string} fid Feature identifier.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeOgcFidFilter(node, fid, objectStack) {
   const filter = createElementNS(OGCNS, 'Filter');
   const child = createElementNS(OGCNS, 'FeatureId');
   filter.appendChild(child);
-  child.setAttribute('fid', fid);
+  child.setAttribute('fid', /** @type {string} */ (fid));
   node.appendChild(filter);
 }
-
 
 /**
  * @param {string|undefined} featurePrefix The prefix of the feature.
@@ -467,11 +721,10 @@ function getTypeName(featurePrefix, featureType) {
   }
 }
 
-
 /**
- * @param {Node} node Node.
- * @param {module:ol/Feature~Feature} feature Feature.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {Element} node Node.
+ * @param {import("../Feature.js").default} feature Feature.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeDelete(node, feature, objectStack) {
   const context = objectStack[objectStack.length - 1];
@@ -488,25 +741,10 @@ function writeDelete(node, feature, objectStack) {
   }
 }
 
-
 /**
- * @type {Object.<string, Object.<string, module:ol/xml~Serializer>>}
- */
-const TRANSACTION_SERIALIZERS = {
-  'http://www.opengis.net/wfs': {
-    'Insert': makeChildAppender(writeFeature),
-    'Update': makeChildAppender(writeUpdate),
-    'Delete': makeChildAppender(writeDelete),
-    'Property': makeChildAppender(writeProperty),
-    'Native': makeChildAppender(writeNative)
-  }
-};
-
-
-/**
- * @param {Node} node Node.
- * @param {module:ol/Feature~Feature} feature Feature.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {Element} node Node.
+ * @param {import("../Feature.js").default} feature Feature.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeUpdate(node, feature, objectStack) {
   const context = objectStack[objectStack.length - 1];
@@ -526,27 +764,35 @@ function writeUpdate(node, feature, objectStack) {
       const value = feature.get(keys[i]);
       if (value !== undefined) {
         let name = keys[i];
-        if (value instanceof Geometry) {
+        if (
+          value &&
+          typeof (/** @type {?} */ (value).getSimplifiedGeometry) === 'function'
+        ) {
           name = geometryName;
         }
         values.push({name: name, value: value});
       }
     }
-    pushSerializeAndPop(/** @type {module:ol/xml~NodeStackItem} */ (
-      {'gmlVersion': context['gmlVersion'], node: node,
-        'hasZ': context['hasZ'], 'srsName': context['srsName']}),
-    TRANSACTION_SERIALIZERS,
-    makeSimpleNodeFactory('Property'), values,
-    objectStack);
+    pushSerializeAndPop(
+      /** @type {import("../xml.js").NodeStackItem} */ ({
+        'gmlVersion': context['gmlVersion'],
+        node: node,
+        'hasZ': context['hasZ'],
+        'srsName': context['srsName'],
+      }),
+      TRANSACTION_SERIALIZERS,
+      makeSimpleNodeFactory('Property'),
+      values,
+      objectStack
+    );
     writeOgcFidFilter(node, fid, objectStack);
   }
 }
 
-
 /**
  * @param {Node} node Node.
  * @param {Object} pair Property name and value.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeProperty(node, pair, objectStack) {
   const name = createElementNS(WFSNS, 'Name');
@@ -557,13 +803,15 @@ function writeProperty(node, pair, objectStack) {
   if (pair.value !== undefined && pair.value !== null) {
     const value = createElementNS(WFSNS, 'Value');
     node.appendChild(value);
-    if (pair.value instanceof Geometry) {
+    if (
+      pair.value &&
+      typeof (/** @type {?} */ (pair.value).getSimplifiedGeometry) ===
+        'function'
+    ) {
       if (gmlVersion === 2) {
-        GML2.prototype.writeGeometryElement(value,
-          pair.value, objectStack);
+        GML2.prototype.writeGeometryElement(value, pair.value, objectStack);
       } else {
-        GML3.prototype.writeGeometryElement(value,
-          pair.value, objectStack);
+        GML3.prototype.writeGeometryElement(value, pair.value, objectStack);
       }
     } else {
       writeStringTextNode(value, pair.value);
@@ -571,32 +819,29 @@ function writeProperty(node, pair, objectStack) {
   }
 }
 
-
 /**
- * @param {Node} node Node.
- * @param {{vendorId: string, safeToIgnore: boolean, value: string}}
- *     nativeElement The native element.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {Element} node Node.
+ * @param {{vendorId: string, safeToIgnore: boolean, value: string}} nativeElement The native element.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeNative(node, nativeElement, objectStack) {
   if (nativeElement.vendorId) {
     node.setAttribute('vendorId', nativeElement.vendorId);
   }
   if (nativeElement.safeToIgnore !== undefined) {
-    node.setAttribute('safeToIgnore', nativeElement.safeToIgnore);
+    node.setAttribute('safeToIgnore', String(nativeElement.safeToIgnore));
   }
   if (nativeElement.value !== undefined) {
     writeStringTextNode(node, nativeElement.value);
   }
 }
 
-
 /**
- * @type {Object.<string, Object.<string, module:ol/xml~Serializer>>}
+ * @type {Object<string, Object<string, import("../xml.js").Serializer>>}
  */
 const GETFEATURE_SERIALIZERS = {
   'http://www.opengis.net/wfs': {
-    'Query': makeChildAppender(writeQuery)
+    'Query': makeChildAppender(writeQuery),
   },
   'http://www.opengis.net/ogc': {
     'During': makeChildAppender(writeDuringFilter),
@@ -615,15 +860,14 @@ const GETFEATURE_SERIALIZERS = {
     'PropertyIsGreaterThanOrEqualTo': makeChildAppender(writeComparisonFilter),
     'PropertyIsNull': makeChildAppender(writeIsNullFilter),
     'PropertyIsBetween': makeChildAppender(writeIsBetweenFilter),
-    'PropertyIsLike': makeChildAppender(writeIsLikeFilter)
-  }
+    'PropertyIsLike': makeChildAppender(writeIsLikeFilter),
+  },
 };
 
-
 /**
- * @param {Node} node Node.
+ * @param {Element} node Node.
  * @param {string} featureType Feature type.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeQuery(node, featureType, objectStack) {
   const context = /** @type {Object} */ (objectStack[objectStack.length - 1]);
@@ -645,12 +889,18 @@ function writeQuery(node, featureType, objectStack) {
   if (featureNS) {
     node.setAttributeNS(XMLNS, 'xmlns:' + featurePrefix, featureNS);
   }
-  const item = /** @type {module:ol/xml~NodeStackItem} */ (assign({}, context));
+  const item = /** @type {import("../xml.js").NodeStackItem} */ (assign(
+    {},
+    context
+  ));
   item.node = node;
-  pushSerializeAndPop(item,
+  pushSerializeAndPop(
+    item,
     QUERY_SERIALIZERS,
-    makeSimpleNodeFactory('PropertyName'), propertyNames,
-    objectStack);
+    makeSimpleNodeFactory('PropertyName'),
+    propertyNames,
+    objectStack
+  );
   const filter = context['filter'];
   if (filter) {
     const child = createElementNS(OGCNS, 'Filter');
@@ -659,26 +909,27 @@ function writeQuery(node, featureType, objectStack) {
   }
 }
 
-
 /**
  * @param {Node} node Node.
- * @param {ol.format.filter.Filter} filter Filter.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {import("./filter/Filter.js").default} filter Filter.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeFilterCondition(node, filter, objectStack) {
-  /** @type {module:ol/xml~NodeStackItem} */
+  /** @type {import("../xml.js").NodeStackItem} */
   const item = {node: node};
-  pushSerializeAndPop(item,
+  pushSerializeAndPop(
+    item,
     GETFEATURE_SERIALIZERS,
     makeSimpleNodeFactory(filter.getTagName()),
-    [filter], objectStack);
+    [filter],
+    objectStack
+  );
 }
-
 
 /**
  * @param {Node} node Node.
- * @param {ol.format.filter.Bbox} filter Filter.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {import("./filter/Bbox.js").default} filter Filter.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeBboxFilter(node, filter, objectStack) {
   const context = objectStack[objectStack.length - 1];
@@ -688,11 +939,10 @@ function writeBboxFilter(node, filter, objectStack) {
   GML3.prototype.writeGeometryElement(node, filter.extent, objectStack);
 }
 
-
 /**
  * @param {Node} node Node.
- * @param {ol.format.filter.Contains} filter Filter.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {import("./filter/Contains.js").default} filter Filter.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeContainsFilter(node, filter, objectStack) {
   const context = objectStack[objectStack.length - 1];
@@ -702,11 +952,10 @@ function writeContainsFilter(node, filter, objectStack) {
   GML3.prototype.writeGeometryElement(node, filter.geometry, objectStack);
 }
 
-
 /**
  * @param {Node} node Node.
- * @param {ol.format.filter.Intersects} filter Filter.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {import("./filter/Intersects.js").default} filter Filter.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeIntersectsFilter(node, filter, objectStack) {
   const context = objectStack[objectStack.length - 1];
@@ -716,11 +965,10 @@ function writeIntersectsFilter(node, filter, objectStack) {
   GML3.prototype.writeGeometryElement(node, filter.geometry, objectStack);
 }
 
-
 /**
  * @param {Node} node Node.
- * @param {ol.format.filter.Within} filter Filter.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {import("./filter/Within.js").default} filter Filter.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeWithinFilter(node, filter, objectStack) {
   const context = objectStack[objectStack.length - 1];
@@ -730,14 +978,12 @@ function writeWithinFilter(node, filter, objectStack) {
   GML3.prototype.writeGeometryElement(node, filter.geometry, objectStack);
 }
 
-
 /**
  * @param {Node} node Node.
- * @param {ol.format.filter.During} filter Filter.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {import("./filter/During.js").default} filter Filter.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeDuringFilter(node, filter, objectStack) {
-
   const valueReference = createElementNS(FESNS, 'ValueReference');
   writeStringTextNode(valueReference, filter.propertyName);
   node.appendChild(valueReference);
@@ -755,46 +1001,49 @@ function writeDuringFilter(node, filter, objectStack) {
   writeTimeInstant(end, filter.end);
 }
 
-
 /**
  * @param {Node} node Node.
- * @param {ol.format.filter.LogicalNary} filter Filter.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {import("./filter/LogicalNary.js").default} filter Filter.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeLogicalFilter(node, filter, objectStack) {
-  /** @type {module:ol/xml~NodeStackItem} */
+  /** @type {import("../xml.js").NodeStackItem} */
   const item = {node: node};
   const conditions = filter.conditions;
   for (let i = 0, ii = conditions.length; i < ii; ++i) {
     const condition = conditions[i];
-    pushSerializeAndPop(item,
+    pushSerializeAndPop(
+      item,
       GETFEATURE_SERIALIZERS,
       makeSimpleNodeFactory(condition.getTagName()),
-      [condition], objectStack);
+      [condition],
+      objectStack
+    );
   }
 }
 
-
 /**
  * @param {Node} node Node.
- * @param {ol.format.filter.Not} filter Filter.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {import("./filter/Not.js").default} filter Filter.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeNotFilter(node, filter, objectStack) {
-  /** @type {module:ol/xml~NodeStackItem} */
+  /** @type {import("../xml.js").NodeStackItem} */
   const item = {node: node};
   const condition = filter.condition;
-  pushSerializeAndPop(item,
+  pushSerializeAndPop(
+    item,
     GETFEATURE_SERIALIZERS,
     makeSimpleNodeFactory(condition.getTagName()),
-    [condition], objectStack);
+    [condition],
+    objectStack
+  );
 }
 
-
 /**
- * @param {Node} node Node.
- * @param {ol.format.filter.ComparisonBinary} filter Filter.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {Element} node Node.
+ * @param {import("./filter/ComparisonBinary.js").default} filter Filter.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeComparisonFilter(node, filter, objectStack) {
   if (filter.matchCase !== undefined) {
@@ -804,21 +1053,19 @@ function writeComparisonFilter(node, filter, objectStack) {
   writeOgcLiteral(node, '' + filter.expression);
 }
 
-
 /**
  * @param {Node} node Node.
- * @param {ol.format.filter.IsNull} filter Filter.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {import("./filter/IsNull.js").default} filter Filter.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeIsNullFilter(node, filter, objectStack) {
   writeOgcPropertyName(node, filter.propertyName);
 }
 
-
 /**
  * @param {Node} node Node.
- * @param {ol.format.filter.IsBetween} filter Filter.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {import("./filter/IsBetween.js").default} filter Filter.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeIsBetweenFilter(node, filter, objectStack) {
   writeOgcPropertyName(node, filter.propertyName);
@@ -832,11 +1079,10 @@ function writeIsBetweenFilter(node, filter, objectStack) {
   writeOgcLiteral(upperBoundary, '' + filter.upperBoundary);
 }
 
-
 /**
- * @param {Node} node Node.
- * @param {ol.format.filter.IsLike} filter Filter.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {Element} node Node.
+ * @param {import("./filter/IsLike.js").default} filter Filter.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeIsLikeFilter(node, filter, objectStack) {
   node.setAttribute('wildCard', filter.wildCard);
@@ -849,7 +1095,6 @@ function writeIsLikeFilter(node, filter, objectStack) {
   writeOgcLiteral(node, '' + filter.pattern);
 }
 
-
 /**
  * @param {string} tagName Tag name.
  * @param {Node} node Node.
@@ -861,7 +1106,6 @@ function writeOgcExpression(tagName, node, value) {
   node.appendChild(property);
 }
 
-
 /**
  * @param {Node} node Node.
  * @param {string} value PropertyName value.
@@ -870,7 +1114,6 @@ function writeOgcPropertyName(node, value) {
   writeOgcExpression('PropertyName', node, value);
 }
 
-
 /**
  * @param {Node} node Node.
  * @param {string} value PropertyName value.
@@ -878,7 +1121,6 @@ function writeOgcPropertyName(node, value) {
 function writeOgcLiteral(node, value) {
   writeOgcExpression('Literal', node, value);
 }
-
 
 /**
  * @param {Node} node Node.
@@ -893,11 +1135,10 @@ function writeTimeInstant(node, time) {
   writeStringTextNode(timePosition, time);
 }
 
-
 /**
  * Encode filter as WFS `Filter` and return the Node.
  *
- * @param {ol.format.filter.Filter} filter Filter.
+ * @param {import("./filter/Filter.js").default} filter Filter.
  * @return {Node} Result.
  * @api
  */
@@ -907,197 +1148,25 @@ export function writeFilter(filter) {
   return child;
 }
 
-
 /**
  * @param {Node} node Node.
- * @param {Array.<string>} featureTypes Feature types.
- * @param {Array.<*>} objectStack Node stack.
+ * @param {Array<string>} featureTypes Feature types.
+ * @param {Array<*>} objectStack Node stack.
  */
 function writeGetFeature(node, featureTypes, objectStack) {
   const context = /** @type {Object} */ (objectStack[objectStack.length - 1]);
-  const item = /** @type {module:ol/xml~NodeStackItem} */ (assign({}, context));
+  const item = /** @type {import("../xml.js").NodeStackItem} */ (assign(
+    {},
+    context
+  ));
   item.node = node;
-  pushSerializeAndPop(item,
+  pushSerializeAndPop(
+    item,
     GETFEATURE_SERIALIZERS,
-    makeSimpleNodeFactory('Query'), featureTypes,
-    objectStack);
+    makeSimpleNodeFactory('Query'),
+    featureTypes,
+    objectStack
+  );
 }
 
-
-/**
- * Encode format as WFS `GetFeature` and return the Node.
- *
- * @param {module:ol/format/WFS~WriteGetFeatureOptions} options Options.
- * @return {Node} Result.
- * @api
- */
-WFS.prototype.writeGetFeature = function(options) {
-  const node = createElementNS(WFSNS, 'GetFeature');
-  node.setAttribute('service', 'WFS');
-  node.setAttribute('version', '1.1.0');
-  let filter;
-  if (options) {
-    if (options.handle) {
-      node.setAttribute('handle', options.handle);
-    }
-    if (options.outputFormat) {
-      node.setAttribute('outputFormat', options.outputFormat);
-    }
-    if (options.maxFeatures !== undefined) {
-      node.setAttribute('maxFeatures', options.maxFeatures);
-    }
-    if (options.resultType) {
-      node.setAttribute('resultType', options.resultType);
-    }
-    if (options.startIndex !== undefined) {
-      node.setAttribute('startIndex', options.startIndex);
-    }
-    if (options.count !== undefined) {
-      node.setAttribute('count', options.count);
-    }
-    filter = options.filter;
-    if (options.bbox) {
-      assert(options.geometryName,
-        12); // `options.geometryName` must also be provided when `options.bbox` is set
-      const bbox = bboxFilter(
-        /** @type {string} */ (options.geometryName), options.bbox, options.srsName);
-      if (filter) {
-        // if bbox and filter are both set, combine the two into a single filter
-        filter = andFilter(filter, bbox);
-      } else {
-        filter = bbox;
-      }
-    }
-  }
-  node.setAttributeNS(XML_SCHEMA_INSTANCE_URI, 'xsi:schemaLocation', this.schemaLocation_);
-  /** @type {module:ol/xml~NodeStackItem} */
-  const context = {
-    node: node,
-    'srsName': options.srsName,
-    'featureNS': options.featureNS ? options.featureNS : this.featureNS_,
-    'featurePrefix': options.featurePrefix,
-    'geometryName': options.geometryName,
-    'filter': filter,
-    'propertyNames': options.propertyNames ? options.propertyNames : []
-  };
-  assert(Array.isArray(options.featureTypes),
-    11); // `options.featureTypes` should be an Array
-  writeGetFeature(node, /** @type {!Array.<string>} */ (options.featureTypes), [context]);
-  return node;
-};
-
-
-/**
- * Encode format as WFS `Transaction` and return the Node.
- *
- * @param {Array.<module:ol/Feature~Feature>} inserts The features to insert.
- * @param {Array.<module:ol/Feature~Feature>} updates The features to update.
- * @param {Array.<module:ol/Feature~Feature>} deletes The features to delete.
- * @param {module:ol/format/WFS~WriteTransactionOptions} options Write options.
- * @return {Node} Result.
- * @api
- */
-WFS.prototype.writeTransaction = function(inserts, updates, deletes, options) {
-  const objectStack = [];
-  const node = createElementNS(WFSNS, 'Transaction');
-  const version = options.version ? options.version : DEFAULT_VERSION;
-  const gmlVersion = version === '1.0.0' ? 2 : 3;
-  node.setAttribute('service', 'WFS');
-  node.setAttribute('version', version);
-  let baseObj;
-  /** @type {module:ol/xml~NodeStackItem} */
-  let obj;
-  if (options) {
-    baseObj = options.gmlOptions ? options.gmlOptions : {};
-    if (options.handle) {
-      node.setAttribute('handle', options.handle);
-    }
-  }
-  const schemaLocation = SCHEMA_LOCATIONS[version];
-  node.setAttributeNS(XML_SCHEMA_INSTANCE_URI, 'xsi:schemaLocation', schemaLocation);
-  const featurePrefix = options.featurePrefix ? options.featurePrefix : FEATURE_PREFIX;
-  if (inserts) {
-    obj = {node: node, 'featureNS': options.featureNS,
-      'featureType': options.featureType, 'featurePrefix': featurePrefix,
-      'gmlVersion': gmlVersion, 'hasZ': options.hasZ, 'srsName': options.srsName};
-    assign(obj, baseObj);
-    pushSerializeAndPop(obj,
-      TRANSACTION_SERIALIZERS,
-      makeSimpleNodeFactory('Insert'), inserts,
-      objectStack);
-  }
-  if (updates) {
-    obj = {node: node, 'featureNS': options.featureNS,
-      'featureType': options.featureType, 'featurePrefix': featurePrefix,
-      'gmlVersion': gmlVersion, 'hasZ': options.hasZ, 'srsName': options.srsName};
-    assign(obj, baseObj);
-    pushSerializeAndPop(obj,
-      TRANSACTION_SERIALIZERS,
-      makeSimpleNodeFactory('Update'), updates,
-      objectStack);
-  }
-  if (deletes) {
-    pushSerializeAndPop({node: node, 'featureNS': options.featureNS,
-      'featureType': options.featureType, 'featurePrefix': featurePrefix,
-      'gmlVersion': gmlVersion, 'srsName': options.srsName},
-    TRANSACTION_SERIALIZERS,
-    makeSimpleNodeFactory('Delete'), deletes,
-    objectStack);
-  }
-  if (options.nativeElements) {
-    pushSerializeAndPop({node: node, 'featureNS': options.featureNS,
-      'featureType': options.featureType, 'featurePrefix': featurePrefix,
-      'gmlVersion': gmlVersion, 'srsName': options.srsName},
-    TRANSACTION_SERIALIZERS,
-    makeSimpleNodeFactory('Native'), options.nativeElements,
-    objectStack);
-  }
-  return node;
-};
-
-
-/**
- * Read the projection from a WFS source.
- *
- * @function
- * @param {Document|Node|Object|string} source Source.
- * @return {?module:ol/proj/Projection~Projection} Projection.
- * @api
- */
-WFS.prototype.readProjection;
-
-
-/**
- * @inheritDoc
- */
-WFS.prototype.readProjectionFromDocument = function(doc) {
-  for (let n = doc.firstChild; n; n = n.nextSibling) {
-    if (n.nodeType == Node.ELEMENT_NODE) {
-      return this.readProjectionFromNode(n);
-    }
-  }
-  return null;
-};
-
-
-/**
- * @inheritDoc
- */
-WFS.prototype.readProjectionFromNode = function(node) {
-  if (node.firstElementChild &&
-      node.firstElementChild.firstElementChild) {
-    node = node.firstElementChild.firstElementChild;
-    for (let n = node.firstElementChild; n; n = n.nextElementSibling) {
-      if (!(n.childNodes.length === 0 ||
-          (n.childNodes.length === 1 &&
-          n.firstChild.nodeType === 3))) {
-        const objectStack = [{}];
-        this.gmlFormat_.readGeometryElement(n, objectStack);
-        return getProjection(objectStack.pop().srsName);
-      }
-    }
-  }
-
-  return null;
-};
 export default WFS;

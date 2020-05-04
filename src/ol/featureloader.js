@@ -1,75 +1,82 @@
 /**
  * @module ol/featureloader
  */
-import {UNDEFINED} from './functions.js';
 import FormatType from './format/FormatType.js';
-
+import {VOID} from './functions.js';
 
 /**
- * {@link module:ol/source/Vector~Vector} sources use a function of this type to
+ *
+ * @type {boolean}
+ * @private
+ */
+let withCredentials = false;
+
+/**
+ * {@link module:ol/source/Vector} sources use a function of this type to
  * load features.
  *
  * This function takes an {@link module:ol/extent~Extent} representing the area to be loaded,
  * a `{number}` representing the resolution (map units per pixel) and an
- * {@link module:ol/proj/Projection~Projection} for the projection  as
+ * {@link module:ol/proj/Projection} for the projection  as
  * arguments. `this` within the function is bound to the
- * {@link module:ol/source/Vector~Vector} it's called from.
+ * {@link module:ol/source/Vector} it's called from.
  *
  * The function is responsible for loading the features and adding them to the
  * source.
- * @typedef {function(this:module:ol/source/Vector~Vector, module:ol/extent~Extent, number,
- *                    module:ol/proj/Projection~Projection)} FeatureLoader
+ * @typedef {function(this:(import("./source/Vector").default|import("./VectorTile.js").default), import("./extent.js").Extent, number,
+ *                    import("./proj/Projection.js").default): void} FeatureLoader
  * @api
  */
 
-
 /**
- * {@link module:ol/source/Vector~Vector} sources use a function of this type to
+ * {@link module:ol/source/Vector} sources use a function of this type to
  * get the url to load features from.
  *
  * This function takes an {@link module:ol/extent~Extent} representing the area
  * to be loaded, a `{number}` representing the resolution (map units per pixel)
- * and an {@link module:ol/proj/Projection~Projection} for the projection  as
+ * and an {@link module:ol/proj/Projection} for the projection  as
  * arguments and returns a `{string}` representing the URL.
- * @typedef {function(module:ol/extent~Extent, number, module:ol/proj/Projection~Projection): string} FeatureUrlFunction
+ * @typedef {function(import("./extent.js").Extent, number, import("./proj/Projection.js").default): string} FeatureUrlFunction
  * @api
  */
 
-
 /**
- * @param {string|module:ol/featureloader~FeatureUrlFunction} url Feature URL service.
- * @param {module:ol/format/Feature~FeatureFormat} format Feature format.
- * @param {function(this:module:ol/VectorTile~VectorTile, Array.<module:ol/Feature~Feature>, module:ol/proj/Projection~Projection, module:ol/extent~Extent)|function(this:module:ol/source/Vector~Vector, Array.<module:ol/Feature~Feature>)} success
+ * @param {string|FeatureUrlFunction} url Feature URL service.
+ * @param {import("./format/Feature.js").default} format Feature format.
+ * @param {function(this:import("./VectorTile.js").default, Array<import("./Feature.js").default>, import("./proj/Projection.js").default, import("./extent.js").Extent): void|function(this:import("./source/Vector").default, Array<import("./Feature.js").default>): void} success
  *     Function called with the loaded features and optionally with the data
  *     projection. Called with the vector tile or source as `this`.
- * @param {function(this:module:ol/VectorTile~VectorTile)|function(this:module:ol/source/Vector~Vector)} failure
+ * @param {function(this:import("./VectorTile.js").default): void|function(this:import("./source/Vector").default): void} failure
  *     Function called when loading failed. Called with the vector tile or
  *     source as `this`.
- * @return {module:ol/featureloader~FeatureLoader} The feature loader.
+ * @return {FeatureLoader} The feature loader.
  */
 export function loadFeaturesXhr(url, format, success, failure) {
   return (
     /**
-     * @param {module:ol/extent~Extent} extent Extent.
+     * @param {import("./extent.js").Extent} extent Extent.
      * @param {number} resolution Resolution.
-     * @param {module:ol/proj/Projection~Projection} projection Projection.
-     * @this {module:ol/source/Vector~Vector|module:ol/VectorTile~VectorTile}
+     * @param {import("./proj/Projection.js").default} projection Projection.
+     * @this {import("./source/Vector").default|import("./VectorTile.js").default}
      */
-    function(extent, resolution, projection) {
+    function (extent, resolution, projection) {
       const xhr = new XMLHttpRequest();
-      xhr.open('GET',
+      xhr.open(
+        'GET',
         typeof url === 'function' ? url(extent, resolution, projection) : url,
-        true);
+        true
+      );
       if (format.getType() == FormatType.ARRAY_BUFFER) {
         xhr.responseType = 'arraybuffer';
       }
+      xhr.withCredentials = withCredentials;
       /**
        * @param {Event} event Event.
        * @private
        */
-      xhr.onload = function(event) {
+      xhr.onload = function (event) {
         // status will be 0 for file:// urls
-        if (!xhr.status || xhr.status >= 200 && xhr.status < 300) {
+        if (!xhr.status || (xhr.status >= 200 && xhr.status < 300)) {
           const type = format.getType();
           /** @type {Document|Node|Object|string|undefined} */
           let source;
@@ -78,15 +85,23 @@ export function loadFeaturesXhr(url, format, success, failure) {
           } else if (type == FormatType.XML) {
             source = xhr.responseXML;
             if (!source) {
-              source = new DOMParser().parseFromString(xhr.responseText, 'application/xml');
+              source = new DOMParser().parseFromString(
+                xhr.responseText,
+                'application/xml'
+              );
             }
           } else if (type == FormatType.ARRAY_BUFFER) {
             source = /** @type {ArrayBuffer} */ (xhr.response);
           }
           if (source) {
-            success.call(this, format.readFeatures(source,
-              {featureProjection: projection}),
-            format.readProjection(source), format.getLastExtent());
+            success.call(
+              this,
+              format.readFeatures(source, {
+                extent: extent,
+                featureProjection: projection,
+              }),
+              format.readProjection(source)
+            );
           } else {
             failure.call(this);
           }
@@ -97,7 +112,7 @@ export function loadFeaturesXhr(url, format, success, failure) {
       /**
        * @private
        */
-      xhr.onerror = function() {
+      xhr.onerror = function () {
         failure.call(this);
       }.bind(this);
       xhr.send();
@@ -105,25 +120,44 @@ export function loadFeaturesXhr(url, format, success, failure) {
   );
 }
 
-
 /**
  * Create an XHR feature loader for a `url` and `format`. The feature loader
  * loads features (with XHR), parses the features, and adds them to the
  * vector source.
- * @param {string|module:ol/featureloader~FeatureUrlFunction} url Feature URL service.
- * @param {module:ol/format/Feature~FeatureFormat} format Feature format.
- * @return {module:ol/featureloader~FeatureLoader} The feature loader.
+ * @param {string|FeatureUrlFunction} url Feature URL service.
+ * @param {import("./format/Feature.js").default} format Feature format.
+ * @return {FeatureLoader} The feature loader.
  * @api
  */
 export function xhr(url, format) {
-  return loadFeaturesXhr(url, format,
+  return loadFeaturesXhr(
+    url,
+    format,
     /**
-     * @param {Array.<module:ol/Feature~Feature>} features The loaded features.
-     * @param {module:ol/proj/Projection~Projection} dataProjection Data
+     * @param {Array<import("./Feature.js").default>} features The loaded features.
+     * @param {import("./proj/Projection.js").default} dataProjection Data
      * projection.
-     * @this {module:ol/source/Vector~Vector}
+     * @this {import("./source/Vector").default|import("./VectorTile.js").default}
      */
-    function(features, dataProjection) {
-      this.addFeatures(features);
-    }, /* FIXME handle error */ UNDEFINED);
+    function (features, dataProjection) {
+      const sourceOrTile = /** @type {?} */ (this);
+      if (typeof sourceOrTile.addFeatures === 'function') {
+        /** @type {import("./source/Vector").default} */ (sourceOrTile).addFeatures(
+          features
+        );
+      }
+    },
+    /* FIXME handle error */ VOID
+  );
+}
+
+/**
+ * Setter for the withCredentials configuration for the XHR.
+ *
+ * @param {boolean} xhrWithCredentials The value of withCredentials to set.
+ * Compare https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest/
+ * @api
+ */
+export function setWithCredentials(xhrWithCredentials) {
+  withCredentials = xhrWithCredentials;
 }

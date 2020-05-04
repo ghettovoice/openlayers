@@ -2,9 +2,8 @@
  * @module ol/geom/flat/area
  */
 
-
 /**
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
  * @param {number} end End.
  * @param {number} stride Stride.
@@ -24,11 +23,10 @@ export function linearRing(flatCoordinates, offset, end, stride) {
   return twiceArea / 2;
 }
 
-
 /**
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
- * @param {Array.<number>} ends Ends.
+ * @param {Array<number>} ends Ends.
  * @param {number} stride Stride.
  * @return {number} Area.
  */
@@ -42,11 +40,10 @@ export function linearRings(flatCoordinates, offset, ends, stride) {
   return area;
 }
 
-
 /**
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
- * @param {Array.<Array.<number>>} endss Endss.
+ * @param {Array<Array<number>>} endss Endss.
  * @param {number} stride Stride.
  * @return {number} Area.
  */

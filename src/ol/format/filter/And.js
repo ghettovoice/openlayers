@@ -1,23 +1,21 @@
 /**
  * @module ol/format/filter/And
  */
-import {inherits} from '../../index.js';
-import LogicalNary from '../filter/LogicalNary.js';
+import LogicalNary from './LogicalNary.js';
 
 /**
  * @classdesc
  * Represents a logical `<And>` operator between two or more filter conditions.
  *
- * @constructor
  * @abstract
- * @param {...ol.format.filter.Filter} conditions Conditions.
- * @extends {ol.format.filter.LogicalNary}
  */
-const And = function(conditions) {
-  const params = ['And'].concat(Array.prototype.slice.call(arguments));
-  LogicalNary.apply(this, params);
-};
-
-inherits(And, LogicalNary);
+class And extends LogicalNary {
+  /**
+   * @param {...import("./Filter.js").default} conditions Conditions.
+   */
+  constructor(conditions) {
+    super('And', Array.prototype.slice.call(arguments));
+  }
+}
 
 export default And;

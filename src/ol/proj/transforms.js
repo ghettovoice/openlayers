@@ -3,13 +3,11 @@
  */
 import {isEmpty} from '../obj.js';
 
-
 /**
  * @private
- * @type {!Object.<string, Object.<string, module:ol/proj~TransformFunction>>}
+ * @type {!Object<string, Object<string, import("../proj.js").TransformFunction>>}
  */
 let transforms = {};
-
 
 /**
  * Clear the transform cache.
@@ -18,14 +16,13 @@ export function clear() {
   transforms = {};
 }
 
-
 /**
  * Registers a conversion function to convert coordinates from the source
  * projection to the destination projection.
  *
- * @param {module:ol/proj/Projection~Projection} source Source.
- * @param {module:ol/proj/Projection~Projection} destination Destination.
- * @param {module:ol/proj~TransformFunction} transformFn Transform.
+ * @param {import("./Projection.js").default} source Source.
+ * @param {import("./Projection.js").default} destination Destination.
+ * @param {import("../proj.js").TransformFunction} transformFn Transform.
  */
 export function add(source, destination, transformFn) {
   const sourceCode = source.getCode();
@@ -36,15 +33,14 @@ export function add(source, destination, transformFn) {
   transforms[sourceCode][destinationCode] = transformFn;
 }
 
-
 /**
  * Unregisters the conversion function to convert coordinates from the source
  * projection to the destination projection.  This method is used to clean up
  * cached transforms during testing.
  *
- * @param {module:ol/proj/Projection~Projection} source Source projection.
- * @param {module:ol/proj/Projection~Projection} destination Destination projection.
- * @return {module:ol/proj~TransformFunction} transformFn The unregistered transform.
+ * @param {import("./Projection.js").default} source Source projection.
+ * @param {import("./Projection.js").default} destination Destination projection.
+ * @return {import("../proj.js").TransformFunction} transformFn The unregistered transform.
  */
 export function remove(source, destination) {
   const sourceCode = source.getCode();
@@ -57,12 +53,11 @@ export function remove(source, destination) {
   return transform;
 }
 
-
 /**
  * Get a transform given a source code and a destination code.
  * @param {string} sourceCode The code for the source projection.
  * @param {string} destinationCode The code for the destination projection.
- * @return {module:ol/proj~TransformFunction|undefined} The transform function (if found).
+ * @return {import("../proj.js").TransformFunction|undefined} The transform function (if found).
  */
 export function get(sourceCode, destinationCode) {
   let transform;

@@ -3,20 +3,27 @@
  */
 import {lerp, squaredDistance as squaredDx} from '../../math.js';
 
-
 /**
  * Returns the point on the 2D line segment flatCoordinates[offset1] to
  * flatCoordinates[offset2] that is closest to the point (x, y).  Extra
  * dimensions are linearly interpolated.
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset1 Offset 1.
  * @param {number} offset2 Offset 2.
  * @param {number} stride Stride.
  * @param {number} x X.
  * @param {number} y Y.
- * @param {Array.<number>} closestPoint Closest point.
+ * @param {Array<number>} closestPoint Closest point.
  */
-function assignClosest(flatCoordinates, offset1, offset2, stride, x, y, closestPoint) {
+function assignClosest(
+  flatCoordinates,
+  offset1,
+  offset2,
+  stride,
+  x,
+  y,
+  closestPoint
+) {
   const x1 = flatCoordinates[offset1];
   const y1 = flatCoordinates[offset1 + 1];
   const dx = flatCoordinates[offset2] - x1;
@@ -30,8 +37,11 @@ function assignClosest(flatCoordinates, offset1, offset2, stride, x, y, closestP
       offset = offset2;
     } else if (t > 0) {
       for (let i = 0; i < stride; ++i) {
-        closestPoint[i] = lerp(flatCoordinates[offset1 + i],
-          flatCoordinates[offset2 + i], t);
+        closestPoint[i] = lerp(
+          flatCoordinates[offset1 + i],
+          flatCoordinates[offset2 + i],
+          t
+        );
       }
       closestPoint.length = stride;
       return;
@@ -45,11 +55,10 @@ function assignClosest(flatCoordinates, offset1, offset2, stride, x, y, closestP
   closestPoint.length = stride;
 }
 
-
 /**
  * Return the squared of the largest distance between any pair of consecutive
  * coordinates.
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
  * @param {number} end End.
  * @param {number} stride Stride.
@@ -72,47 +81,54 @@ export function maxSquaredDelta(flatCoordinates, offset, end, stride, max) {
   return max;
 }
 
-
 /**
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
- * @param {Array.<number>} ends Ends.
+ * @param {Array<number>} ends Ends.
  * @param {number} stride Stride.
  * @param {number} max Max squared delta.
  * @return {number} Max squared delta.
  */
-export function arrayMaxSquaredDelta(flatCoordinates, offset, ends, stride, max) {
+export function arrayMaxSquaredDelta(
+  flatCoordinates,
+  offset,
+  ends,
+  stride,
+  max
+) {
   for (let i = 0, ii = ends.length; i < ii; ++i) {
     const end = ends[i];
-    max = maxSquaredDelta(
-      flatCoordinates, offset, end, stride, max);
+    max = maxSquaredDelta(flatCoordinates, offset, end, stride, max);
     offset = end;
   }
   return max;
 }
 
-
 /**
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
- * @param {Array.<Array.<number>>} endss Endss.
+ * @param {Array<Array<number>>} endss Endss.
  * @param {number} stride Stride.
  * @param {number} max Max squared delta.
  * @return {number} Max squared delta.
  */
-export function multiArrayMaxSquaredDelta(flatCoordinates, offset, endss, stride, max) {
+export function multiArrayMaxSquaredDelta(
+  flatCoordinates,
+  offset,
+  endss,
+  stride,
+  max
+) {
   for (let i = 0, ii = endss.length; i < ii; ++i) {
     const ends = endss[i];
-    max = arrayMaxSquaredDelta(
-      flatCoordinates, offset, ends, stride, max);
+    max = arrayMaxSquaredDelta(flatCoordinates, offset, ends, stride, max);
     offset = ends[ends.length - 1];
   }
   return max;
 }
 
-
 /**
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
  * @param {number} end End.
  * @param {number} stride Stride.
@@ -120,14 +136,24 @@ export function multiArrayMaxSquaredDelta(flatCoordinates, offset, endss, stride
  * @param {boolean} isRing Is ring.
  * @param {number} x X.
  * @param {number} y Y.
- * @param {Array.<number>} closestPoint Closest point.
+ * @param {Array<number>} closestPoint Closest point.
  * @param {number} minSquaredDistance Minimum squared distance.
- * @param {Array.<number>=} opt_tmpPoint Temporary point object.
+ * @param {Array<number>=} opt_tmpPoint Temporary point object.
  * @return {number} Minimum squared distance.
  */
-export function assignClosestPoint(flatCoordinates, offset, end,
-  stride, maxDelta, isRing, x, y, closestPoint, minSquaredDistance,
-  opt_tmpPoint) {
+export function assignClosestPoint(
+  flatCoordinates,
+  offset,
+  end,
+  stride,
+  maxDelta,
+  isRing,
+  x,
+  y,
+  closestPoint,
+  minSquaredDistance,
+  opt_tmpPoint
+) {
   if (offset == end) {
     return minSquaredDistance;
   }
@@ -135,7 +161,11 @@ export function assignClosestPoint(flatCoordinates, offset, end,
   if (maxDelta === 0) {
     // All points are identical, so just test the first point.
     squaredDistance = squaredDx(
-      x, y, flatCoordinates[offset], flatCoordinates[offset + 1]);
+      x,
+      y,
+      flatCoordinates[offset],
+      flatCoordinates[offset + 1]
+    );
     if (squaredDistance < minSquaredDistance) {
       for (i = 0; i < stride; ++i) {
         closestPoint[i] = flatCoordinates[offset + i];
@@ -150,7 +180,14 @@ export function assignClosestPoint(flatCoordinates, offset, end,
   let index = offset + stride;
   while (index < end) {
     assignClosest(
-      flatCoordinates, index - stride, index, stride, x, y, tmpPoint);
+      flatCoordinates,
+      index - stride,
+      index,
+      stride,
+      x,
+      y,
+      tmpPoint
+    );
     squaredDistance = squaredDx(x, y, tmpPoint[0], tmpPoint[1]);
     if (squaredDistance < minSquaredDistance) {
       minSquaredDistance = squaredDistance;
@@ -170,15 +207,27 @@ export function assignClosestPoint(flatCoordinates, offset, end,
       // least (10 - 3) / 2 == 3 (rounded down) points to have any chance of
       // finding a closer point.  We use Math.max(..., 1) to ensure that we
       // always advance at least one point, to avoid an infinite loop.
-      index += stride * Math.max(
-        ((Math.sqrt(squaredDistance) -
-            Math.sqrt(minSquaredDistance)) / maxDelta) | 0, 1);
+      index +=
+        stride *
+        Math.max(
+          ((Math.sqrt(squaredDistance) - Math.sqrt(minSquaredDistance)) /
+            maxDelta) |
+            0,
+          1
+        );
     }
   }
   if (isRing) {
     // Check the closing segment.
     assignClosest(
-      flatCoordinates, end - stride, offset, stride, x, y, tmpPoint);
+      flatCoordinates,
+      end - stride,
+      offset,
+      stride,
+      x,
+      y,
+      tmpPoint
+    );
     squaredDistance = squaredDx(x, y, tmpPoint[0], tmpPoint[1]);
     if (squaredDistance < minSquaredDistance) {
       minSquaredDistance = squaredDistance;
@@ -191,59 +240,97 @@ export function assignClosestPoint(flatCoordinates, offset, end,
   return minSquaredDistance;
 }
 
-
 /**
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
- * @param {Array.<number>} ends Ends.
+ * @param {Array<number>} ends Ends.
  * @param {number} stride Stride.
  * @param {number} maxDelta Max delta.
  * @param {boolean} isRing Is ring.
  * @param {number} x X.
  * @param {number} y Y.
- * @param {Array.<number>} closestPoint Closest point.
+ * @param {Array<number>} closestPoint Closest point.
  * @param {number} minSquaredDistance Minimum squared distance.
- * @param {Array.<number>=} opt_tmpPoint Temporary point object.
+ * @param {Array<number>=} opt_tmpPoint Temporary point object.
  * @return {number} Minimum squared distance.
  */
-export function assignClosestArrayPoint(flatCoordinates, offset, ends,
-  stride, maxDelta, isRing, x, y, closestPoint, minSquaredDistance,
-  opt_tmpPoint) {
+export function assignClosestArrayPoint(
+  flatCoordinates,
+  offset,
+  ends,
+  stride,
+  maxDelta,
+  isRing,
+  x,
+  y,
+  closestPoint,
+  minSquaredDistance,
+  opt_tmpPoint
+) {
   const tmpPoint = opt_tmpPoint ? opt_tmpPoint : [NaN, NaN];
   for (let i = 0, ii = ends.length; i < ii; ++i) {
     const end = ends[i];
     minSquaredDistance = assignClosestPoint(
-      flatCoordinates, offset, end, stride,
-      maxDelta, isRing, x, y, closestPoint, minSquaredDistance, tmpPoint);
+      flatCoordinates,
+      offset,
+      end,
+      stride,
+      maxDelta,
+      isRing,
+      x,
+      y,
+      closestPoint,
+      minSquaredDistance,
+      tmpPoint
+    );
     offset = end;
   }
   return minSquaredDistance;
 }
 
-
 /**
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
- * @param {Array.<Array.<number>>} endss Endss.
+ * @param {Array<Array<number>>} endss Endss.
  * @param {number} stride Stride.
  * @param {number} maxDelta Max delta.
  * @param {boolean} isRing Is ring.
  * @param {number} x X.
  * @param {number} y Y.
- * @param {Array.<number>} closestPoint Closest point.
+ * @param {Array<number>} closestPoint Closest point.
  * @param {number} minSquaredDistance Minimum squared distance.
- * @param {Array.<number>=} opt_tmpPoint Temporary point object.
+ * @param {Array<number>=} opt_tmpPoint Temporary point object.
  * @return {number} Minimum squared distance.
  */
-export function assignClosestMultiArrayPoint(flatCoordinates, offset,
-  endss, stride, maxDelta, isRing, x, y, closestPoint, minSquaredDistance,
-  opt_tmpPoint) {
+export function assignClosestMultiArrayPoint(
+  flatCoordinates,
+  offset,
+  endss,
+  stride,
+  maxDelta,
+  isRing,
+  x,
+  y,
+  closestPoint,
+  minSquaredDistance,
+  opt_tmpPoint
+) {
   const tmpPoint = opt_tmpPoint ? opt_tmpPoint : [NaN, NaN];
   for (let i = 0, ii = endss.length; i < ii; ++i) {
     const ends = endss[i];
     minSquaredDistance = assignClosestArrayPoint(
-      flatCoordinates, offset, ends, stride,
-      maxDelta, isRing, x, y, closestPoint, minSquaredDistance, tmpPoint);
+      flatCoordinates,
+      offset,
+      ends,
+      stride,
+      maxDelta,
+      isRing,
+      x,
+      y,
+      closestPoint,
+      minSquaredDistance,
+      tmpPoint
+    );
     offset = ends[ends.length - 1];
   }
   return minSquaredDistance;

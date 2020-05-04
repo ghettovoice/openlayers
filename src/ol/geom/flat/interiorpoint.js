@@ -1,28 +1,34 @@
 /**
  * @module ol/geom/flat/interiorpoint
  */
+import {linearRingsContainsXY} from './contains.js';
 import {numberSafeCompareFunction} from '../../array.js';
-import {linearRingsContainsXY} from '../flat/contains.js';
-
 
 /**
  * Calculates a point that is likely to lie in the interior of the linear rings.
  * Inspired by JTS's com.vividsolutions.jts.geom.Geometry#getInteriorPoint.
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
- * @param {Array.<number>} ends Ends.
+ * @param {Array<number>} ends Ends.
  * @param {number} stride Stride.
- * @param {Array.<number>} flatCenters Flat centers.
+ * @param {Array<number>} flatCenters Flat centers.
  * @param {number} flatCentersOffset Flat center offset.
- * @param {Array.<number>=} opt_dest Destination.
- * @return {Array.<number>} Destination point as XYM coordinate, where M is the
+ * @param {Array<number>=} opt_dest Destination.
+ * @return {Array<number>} Destination point as XYM coordinate, where M is the
  * length of the horizontal intersection that the point belongs to.
  */
-export function getInteriorPointOfArray(flatCoordinates, offset,
-  ends, stride, flatCenters, flatCentersOffset, opt_dest) {
+export function getInteriorPointOfArray(
+  flatCoordinates,
+  offset,
+  ends,
+  stride,
+  flatCenters,
+  flatCentersOffset,
+  opt_dest
+) {
   let i, ii, x, x1, x2, y1, y2;
   const y = flatCenters[flatCentersOffset + 1];
-  /** @type {Array.<number>} */
+  /** @type {Array<number>} */
   const intersections = [];
   // Calculate intersections with the horizontal line
   for (let r = 0, rr = ends.length; r < rr; ++r) {
@@ -33,7 +39,7 @@ export function getInteriorPointOfArray(flatCoordinates, offset,
       x2 = flatCoordinates[i];
       y2 = flatCoordinates[i + 1];
       if ((y <= y1 && y2 <= y) || (y1 <= y && y <= y2)) {
-        x = (y - y1) / (y2 - y1) * (x2 - x1) + x1;
+        x = ((y - y1) / (y2 - y1)) * (x2 - x1) + x1;
         intersections.push(x);
       }
       x1 = x2;
@@ -71,22 +77,34 @@ export function getInteriorPointOfArray(flatCoordinates, offset,
   }
 }
 
-
 /**
- * @param {Array.<number>} flatCoordinates Flat coordinates.
+ * @param {Array<number>} flatCoordinates Flat coordinates.
  * @param {number} offset Offset.
- * @param {Array.<Array.<number>>} endss Endss.
+ * @param {Array<Array<number>>} endss Endss.
  * @param {number} stride Stride.
- * @param {Array.<number>} flatCenters Flat centers.
- * @return {Array.<number>} Interior points as XYM coordinates, where M is the
+ * @param {Array<number>} flatCenters Flat centers.
+ * @return {Array<number>} Interior points as XYM coordinates, where M is the
  * length of the horizontal intersection that the point belongs to.
  */
-export function getInteriorPointsOfMultiArray(flatCoordinates, offset, endss, stride, flatCenters) {
+export function getInteriorPointsOfMultiArray(
+  flatCoordinates,
+  offset,
+  endss,
+  stride,
+  flatCenters
+) {
   let interiorPoints = [];
   for (let i = 0, ii = endss.length; i < ii; ++i) {
     const ends = endss[i];
-    interiorPoints = getInteriorPointOfArray(flatCoordinates,
-      offset, ends, stride, flatCenters, 2 * i, interiorPoints);
+    interiorPoints = getInteriorPointOfArray(
+      flatCoordinates,
+      offset,
+      ends,
+      stride,
+      flatCenters,
+      2 * i,
+      interiorPoints
+    );
     offset = ends[ends.length - 1];
   }
   return interiorPoints;

@@ -1,30 +1,28 @@
 /**
  * @module ol/format/filter/Comparison
  */
-import {inherits} from '../../index.js';
-import Filter from '../filter/Filter.js';
+import Filter from './Filter.js';
 
 /**
  * @classdesc
  * Abstract class; normally only used for creating subclasses and not instantiated in apps.
  * Base class for WFS GetFeature property comparison filters.
  *
- * @constructor
  * @abstract
- * @param {!string} tagName The XML tag name for this filter.
- * @param {!string} propertyName Name of the context property to compare.
- * @extends {ol.format.filter.Filter}
  */
-const Comparison = function(tagName, propertyName) {
-
-  Filter.call(this, tagName);
-
+class Comparison extends Filter {
   /**
-   * @type {!string}
+   * @param {!string} tagName The XML tag name for this filter.
+   * @param {!string} propertyName Name of the context property to compare.
    */
-  this.propertyName = propertyName;
-};
+  constructor(tagName, propertyName) {
+    super(tagName);
 
-inherits(Comparison, Filter);
+    /**
+     * @type {!string}
+     */
+    this.propertyName = propertyName;
+  }
+}
 
 export default Comparison;

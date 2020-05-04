@@ -1,30 +1,41 @@
+import DoubleClickZoom from '../../../src/ol/interaction/DoubleClickZoom.js';
+import DragPan from '../../../src/ol/interaction/DragPan.js';
 import Feature from '../../../src/ol/Feature.js';
+import GeoJSON from '../../../src/ol/format/GeoJSON.js';
+import ImageLayer from '../../../src/ol/layer/Image.js';
+import ImageState from '../../../src/ol/ImageState.js';
+import ImageStatic from '../../../src/ol/source/ImageStatic.js';
+import Interaction from '../../../src/ol/interaction/Interaction.js';
 import Map from '../../../src/ol/Map.js';
 import MapEvent from '../../../src/ol/MapEvent.js';
-import Overlay from '../../../src/ol/Overlay.js';
-import View from '../../../src/ol/View.js';
-import LineString from '../../../src/ol/geom/LineString.js';
-import {TOUCH} from '../../../src/ol/has.js';
-import {defaults as defaultInteractions} from '../../../src/ol/interaction.js';
-import DoubleClickZoom from '../../../src/ol/interaction/DoubleClickZoom.js';
-import Interaction from '../../../src/ol/interaction/Interaction.js';
 import MouseWheelZoom from '../../../src/ol/interaction/MouseWheelZoom.js';
+import Overlay from '../../../src/ol/Overlay.js';
 import PinchZoom from '../../../src/ol/interaction/PinchZoom.js';
 import TileLayer from '../../../src/ol/layer/Tile.js';
+import TileLayerRenderer from '../../../src/ol/renderer/canvas/TileLayer.js';
 import VectorLayer from '../../../src/ol/layer/Vector.js';
-import IntermediateCanvasRenderer from '../../../src/ol/renderer/canvas/IntermediateCanvas.js';
 import VectorSource from '../../../src/ol/source/Vector.js';
+import View from '../../../src/ol/View.js';
 import XYZ from '../../../src/ol/source/XYZ.js';
+import {LineString, Point, Polygon} from '../../../src/ol/geom.js';
+import {
+  clearUserProjection,
+  fromLonLat,
+  get as getProjection,
+  transform,
+  useGeographic,
+} from '../../../src/ol/proj.js';
+import {defaults as defaultInteractions} from '../../../src/ol/interaction.js';
+import {focus} from '../../../src/ol/events/condition.js';
 
-describe('ol.Map', function() {
-
-  describe('constructor', function() {
-    it('creates a new map', function() {
+describe('ol.Map', function () {
+  describe('constructor', function () {
+    it('creates a new map', function () {
       const map = new Map({});
       expect(map).to.be.a(Map);
     });
 
-    it('creates a set of default interactions', function() {
+    it('creates a set of default interactions', function () {
       const map = new Map({});
       const interactions = map.getInteractions();
       const length = interactions.getLength();
@@ -35,14 +46,15 @@ describe('ol.Map', function() {
       }
     });
 
-    it('creates the viewport', function() {
+    it('creates the viewport', function () {
       const map = new Map({});
       const viewport = map.getViewport();
-      const className = 'ol-viewport' + (TOUCH ? ' ol-touch' : '');
+      const className =
+        'ol-viewport' + ('ontouchstart' in window ? ' ol-touch' : '');
       expect(viewport.className).to.be(className);
     });
 
-    it('creates the overlay containers', function() {
+    it('creates the overlay containers', function () {
       const map = new Map({});
       const container = map.getOverlayContainer();
       expect(container.className).to.be('ol-overlaycontainer');
@@ -50,11 +62,10 @@ describe('ol.Map', function() {
       const containerStop = map.getOverlayContainerStopEvent();
       expect(containerStop.className).to.be('ol-overlaycontainer-stopevent');
     });
-
   });
 
-  describe('#addLayer()', function() {
-    it('adds a layer to the map', function() {
+  describe('#addLayer()', function () {
+    it('adds a layer to the map', function () {
       const map = new Map({});
       const layer = new TileLayer();
       map.addLayer(layer);
@@ -62,20 +73,20 @@ describe('ol.Map', function() {
       expect(map.getLayers().item(0)).to.be(layer);
     });
 
-    it('throws if a layer is added twice', function() {
+    it('throws if a layer is added twice', function () {
       const map = new Map({});
       const layer = new TileLayer();
       map.addLayer(layer);
 
-      const call = function() {
+      const call = function () {
         map.addLayer(layer);
       };
       expect(call).to.throwException();
     });
   });
 
-  describe('#addInteraction()', function() {
-    it('adds an interaction to the map', function() {
+  describe('#addInteraction()', function () {
+    it('adds an interaction to the map', function () {
       const map = new Map({});
       const interaction = new Interaction({});
 
@@ -87,8 +98,8 @@ describe('ol.Map', function() {
     });
   });
 
-  describe('#removeInteraction()', function() {
-    it('removes an interaction from the map', function() {
+  describe('#removeInteraction()', function () {
+    it('removes an interaction from the map', function () {
       const map = new Map({});
       const interaction = new Interaction({});
 
@@ -102,11 +113,10 @@ describe('ol.Map', function() {
     });
   });
 
-  describe('movestart/moveend event', function() {
-
+  describe('movestart/moveend event', function () {
     let target, view, map;
 
-    beforeEach(function() {
+    beforeEach(function () {
       target = document.createElement('div');
 
       const style = target.style;
@@ -118,7 +128,7 @@ describe('ol.Map', function() {
       document.body.appendChild(target);
 
       view = new View({
-        projection: 'EPSG:4326'
+        projection: 'EPSG:4326',
       });
       map = new Map({
         target: target,
@@ -126,28 +136,28 @@ describe('ol.Map', function() {
         layers: [
           new TileLayer({
             source: new XYZ({
-              url: '#{x}/{y}/{z}'
-            })
-          })
-        ]
+              url: '#{x}/{y}/{z}',
+            }),
+          }),
+        ],
       });
     });
 
-    afterEach(function() {
+    afterEach(function () {
       map.dispose();
       document.body.removeChild(target);
     });
 
-    it('are fired only once after view changes', function(done) {
+    it('are fired only once after view changes', function (done) {
       const center = [10, 20];
       const zoom = 3;
       let startCalls = 0;
       let endCalls = 0;
-      map.on('movestart', function() {
+      map.on('movestart', function () {
         ++startCalls;
         expect(startCalls).to.be(1);
       });
-      map.on('moveend', function() {
+      map.on('moveend', function () {
         ++endCalls;
         expect(endCalls).to.be(1);
         expect(view.getCenter()).to.eql(center);
@@ -159,20 +169,20 @@ describe('ol.Map', function() {
       view.setZoom(zoom);
     });
 
-    it('are fired in sequence', function(done) {
+    it('are fired in sequence', function (done) {
       view.setCenter([0, 0]);
       view.setResolution(0.703125);
       map.renderSync();
       const center = [10, 20];
       const zoom = 3;
       const calls = [];
-      map.on('movestart', function(e) {
+      map.on('movestart', function (e) {
         calls.push('start');
         expect(calls).to.eql(['start']);
         expect(e.frameState.viewState.center).to.eql([0, 0]);
         expect(e.frameState.viewState.resolution).to.be(0.703125);
       });
-      map.on('moveend', function() {
+      map.on('moveend', function () {
         calls.push('end');
         expect(calls).to.eql(['start', 'end']);
         expect(view.getCenter()).to.eql(center);
@@ -183,51 +193,122 @@ describe('ol.Map', function() {
       view.setCenter(center);
       view.setZoom(zoom);
     });
-
   });
 
-  describe('#getFeaturesAtPixel', function() {
-
-    let target, map;
-    beforeEach(function() {
-      target = document.createElement('div');
-      target.style.width = target.style.height = '100px';
+  describe('rendercomplete event', function () {
+    let map;
+    beforeEach(function () {
+      const target = document.createElement('div');
+      target.style.width = '100px';
+      target.style.height = '100px';
       document.body.appendChild(target);
       map = new Map({
         target: target,
-        layers: [new VectorLayer({
-          source: new VectorSource({
-            features: [new Feature(new LineString([[-50, 0], [50, 0]]))]
-          })
-        })],
+        layers: [
+          new TileLayer({
+            opacity: 0.5,
+            source: new XYZ({
+              url: 'spec/ol/data/osm-{z}-{x}-{y}.png',
+            }),
+          }),
+          new ImageLayer({
+            source: new ImageStatic({
+              url: 'spec/ol/data/osm-0-0-0.png',
+              imageExtent: getProjection('EPSG:3857').getExtent(),
+              projection: 'EPSG:3857',
+            }),
+          }),
+          new VectorLayer({
+            source: new VectorSource({
+              url: 'spec/ol/data/point.json',
+              format: new GeoJSON(),
+            }),
+          }),
+          new VectorLayer({
+            source: new VectorSource({
+              features: [new Feature(new Point([0, 0]))],
+            }),
+          }),
+        ],
+      });
+    });
+
+    afterEach(function () {
+      document.body.removeChild(map.getTargetElement());
+      map.setTarget(null);
+      map.dispose();
+    });
+
+    it('triggers when all tiles and sources are loaded and faded in', function (done) {
+      map.once('rendercomplete', function () {
+        const layers = map.getLayers().getArray();
+        expect(map.tileQueue_.getTilesLoading()).to.be(0);
+        expect(layers[1].getSource().image_.getState()).to.be(
+          ImageState.LOADED
+        );
+        expect(layers[2].getSource().getFeatures().length).to.be(1);
+        done();
+      });
+      map.setView(
+        new View({
+          center: [0, 0],
+          zoom: 0,
+        })
+      );
+    });
+  });
+
+  describe('#getFeaturesAtPixel', function () {
+    let target, map, layer;
+    beforeEach(function () {
+      target = document.createElement('div');
+      target.style.width = '100px';
+      target.style.height = '100px';
+      document.body.appendChild(target);
+      layer = new VectorLayer({
+        source: new VectorSource({
+          features: [
+            new Feature(
+              new LineString([
+                [-50, 0],
+                [50, 0],
+              ])
+            ),
+          ],
+        }),
+      });
+      map = new Map({
+        target: target,
+        layers: [layer],
         view: new View({
           center: [0, 0],
-          zoom: 17
-        })
+          zoom: 17,
+        }),
       });
       map.renderSync();
     });
-    afterEach(function() {
+    afterEach(function () {
       document.body.removeChild(target);
     });
 
-    it('returns null if no feature was found', function() {
+    it('returns an empty array if no feature was found', function () {
       const features = map.getFeaturesAtPixel([0, 0]);
-      expect(features).to.be(null);
+      expect(features).to.be.an(Array);
+      expect(features).to.be.empty();
     });
 
-    it('returns an array of found features', function() {
+    it('returns an array of found features', function () {
       const features = map.getFeaturesAtPixel([50, 50]);
       expect(features).to.be.an(Array);
       expect(features[0]).to.be.an(Feature);
     });
 
-    it('returns an array of found features with declutter: true', function() {
+    it('returns an array of found features with declutter: true', function () {
       const layer = map.getLayers().item(0);
       map.removeLayer(layer);
       const otherLayer = new VectorLayer({
         declutter: true,
-        source: layer.getSource()
+        source: layer.getSource(),
       });
       map.addLayer(otherLayer);
       map.renderSync();
@@ -236,30 +317,184 @@ describe('ol.Map', function() {
       expect(features[0]).to.be.a(Feature);
     });
 
-    it('respects options', function() {
+    it('respects options', function () {
       const otherLayer = new VectorLayer({
-        source: new VectorSource
+        source: new VectorSource(),
       });
       map.addLayer(otherLayer);
+      map.renderSync();
       const features = map.getFeaturesAtPixel([50, 50], {
-        layerFilter: function(layer) {
-          return layer == otherLayer;
-        }
+        layerFilter: function (layer) {
+          return layer === otherLayer;
+        },
       });
-      expect(features).to.be(null);
+      expect(features).to.be.an(Array);
+      expect(features).to.be.empty();
     });
 
+    it('finds off-world geometries', function () {
+      const line1 = new LineString([
+        [130, 0],
+        [230, 0],
+      ]);
+      line1.transform('EPSG:4326', 'EPSG:3857');
+      const line2 = new LineString([
+        [-230, 0],
+        [-130, 0],
+      ]);
+      line2.transform('EPSG:4326', 'EPSG:3857');
+      layer.getSource().addFeature(new Feature(line1));
+      layer.getSource().addFeature(new Feature(line2));
+      map.getView().setCenter(fromLonLat([180, 0]));
+      map.renderSync();
+
+      let features = map.getFeaturesAtPixel([60, 50]);
+      expect(features).to.be.an(Array);
+      expect(features.length).to.be(2);
+
+      features = map.getFeaturesAtPixel([60, 50], {checkWrapped: false});
+      expect(features).to.be.an(Array);
+      expect(features.length).to.be(1);
+
+      map.getView().setCenter(fromLonLat([-180, 0]));
+      map.renderSync();
+
+      features = map.getFeaturesAtPixel([40, 50]);
+      expect(features).to.be.an(Array);
+      expect(features.length).to.be(2);
+
+      features = map.getFeaturesAtPixel([40, 50], {checkWrapped: false});
+      expect(features).to.be.an(Array);
+      expect(features.length).to.be(1);
+    });
   });
 
-  describe('#forEachLayerAtPixel()', function()  {
+  describe('#getFeaturesAtPixel - useGeographic', function () {
+    let target, map;
+    const size = 256;
+    beforeEach(function () {
+      useGeographic();
 
+      target = document.createElement('div');
+      target.style.width = size + 'px';
+      target.style.height = size + 'px';
+      document.body.appendChild(target);
+
+      map = new Map({
+        target: target,
+        layers: [
+          new VectorLayer({
+            source: new VectorSource({
+              features: [
+                new Feature(
+                  new Polygon([
+                    [
+                      [-100, 40],
+                      [-90, 40],
+                      [-90, 50],
+                      [-100, 50],
+                      [-100, 40],
+                    ],
+                  ])
+                ),
+              ],
+            }),
+          }),
+        ],
+        view: new View({
+          center: [0, 0],
+          zoom: 0,
+        }),
+      });
+      map.renderSync();
+    });
+
+    afterEach(function () {
+      clearUserProjection();
+      document.body.removeChild(target);
+    });
+
+    it('returns an empty array if no feature was found', function () {
+      const features = map.getFeaturesAtPixel([size / 2, size / 2]);
+      expect(features).to.be.an(Array);
+      expect(features).to.be.empty();
+    });
+
+    it('returns an array of found features', function () {
+      const coordinate = [-95, 45];
+      const pixel = map.getPixelFromCoordinate(coordinate);
+      const features = map.getFeaturesAtPixel(pixel);
+      expect(features).to.be.an(Array);
+      expect(features[0]).to.be.a(Feature);
+    });
+  });
+
+  describe('#hasFeatureAtPixel - useGeographic', function () {
+    let target, map;
+    const size = 256;
+    beforeEach(function () {
+      useGeographic();
+
+      target = document.createElement('div');
+      target.style.width = size + 'px';
+      target.style.height = size + 'px';
+      document.body.appendChild(target);
+
+      map = new Map({
+        target: target,
+        layers: [
+          new VectorLayer({
+            source: new VectorSource({
+              features: [
+                new Feature(
+                  new Polygon([
+                    [
+                      [-100, 40],
+                      [-90, 40],
+                      [-90, 50],
+                      [-100, 50],
+                      [-100, 40],
+                    ],
+                  ])
+                ),
+              ],
+            }),
+          }),
+        ],
+        view: new View({
+          center: [0, 0],
+          zoom: 0,
+        }),
+      });
+      map.renderSync();
+    });
+
+    afterEach(function () {
+      clearUserProjection();
+      document.body.removeChild(target);
+    });
+
+    it('returns false if no feature was found', function () {
+      const has = map.hasFeatureAtPixel([size / 2, size / 2]);
+      expect(has).to.be(false);
+    });
+
+    it('returns true if there are features found', function () {
+      const coordinate = [-95, 45];
+      const pixel = map.getPixelFromCoordinate(coordinate);
+      const has = map.hasFeatureAtPixel(pixel);
+      expect(has).to.be(true);
+    });
+  });
+
+  describe('#forEachLayerAtPixel()', function () {
     let target, map, original, log;
 
-    beforeEach(function(done) {
+    beforeEach(function (done) {
       log = [];
-      original = IntermediateCanvasRenderer.prototype.forEachLayerAtCoordinate;
-      IntermediateCanvasRenderer.prototype.forEachLayerAtCoordinate = function(coordinate) {
-        log.push(coordinate.slice());
+      original = TileLayerRenderer.prototype.getDataAtPixel;
+      TileLayerRenderer.prototype.getDataAtPixel = function (pixel) {
+        log.push(pixel.slice());
       };
 
       target = document.createElement('div');
@@ -275,49 +510,47 @@ describe('ol.Map', function() {
         target: target,
         view: new View({
           center: [0, 0],
-          zoom: 1
+          zoom: 1,
         }),
         layers: [
           new TileLayer({
-            source: new XYZ()
+            source: new XYZ(),
           }),
           new TileLayer({
-            source: new XYZ()
+            source: new XYZ(),
           }),
           new TileLayer({
-            source: new XYZ()
-          })
-        ]
+            source: new XYZ(),
+          }),
+        ],
       });
 
-      map.once('postrender', function() {
+      map.once('postrender', function () {
         done();
       });
     });
 
-    afterEach(function() {
-      IntermediateCanvasRenderer.prototype.forEachLayerAtCoordinate = original;
+    afterEach(function () {
+      TileLayerRenderer.prototype.getDataAtPixel = original;
       map.dispose();
       document.body.removeChild(target);
       log = null;
     });
 
-    it('calls each layer renderer with the same coordinate', function() {
+    it('calls each layer renderer with the same pixel', function () {
       const pixel = [10, 20];
-      map.forEachLayerAtPixel(pixel, function() {});
+      map.forEachLayerAtPixel(pixel, function () {});
       expect(log.length).to.equal(3);
       expect(log[0].length).to.equal(2);
       expect(log[0]).to.eql(log[1]);
       expect(log[1]).to.eql(log[2]);
     });
-
   });
 
-  describe('#render()', function() {
-
+  describe('#render()', function () {
     let target, map;
 
-    beforeEach(function() {
+    beforeEach(function () {
       target = document.createElement('div');
       const style = target.style;
       style.position = 'absolute';
@@ -331,17 +564,17 @@ describe('ol.Map', function() {
         view: new View({
           projection: 'EPSG:4326',
           center: [0, 0],
-          resolution: 1
-        })
+          resolution: 1,
+        }),
       });
     });
 
-    afterEach(function() {
+    afterEach(function () {
       map.dispose();
       document.body.removeChild(target);
     });
 
-    it('is called when the view.changed() is called', function() {
+    it('is called when the view.changed() is called', function () {
       const view = map.getView();
 
       const spy = sinon.spy(map, 'render');
@@ -349,7 +582,7 @@ describe('ol.Map', function() {
       expect(spy.callCount).to.be(1);
     });
 
-    it('is not called on view changes after the view has been removed', function() {
+    it('is not called on view changes after the view has been removed', function () {
       const view = map.getView();
       map.setView(null);
 
@@ -358,11 +591,10 @@ describe('ol.Map', function() {
       expect(spy.callCount).to.be(0);
     });
 
-    it('calls renderFrame_ and results in an postrender event', function(done) {
-
+    it('calls renderFrame_ and results in an postrender event', function (done) {
       const spy = sinon.spy(map, 'renderFrame_');
       map.render();
-      map.once('postrender', function(event) {
+      map.once('postrender', function (event) {
         expect(event).to.be.a(MapEvent);
         expect(typeof spy.firstCall.args[0]).to.be('number');
         spy.restore();
@@ -370,14 +602,13 @@ describe('ol.Map', function() {
         expect(frameState).not.to.be(null);
         done();
       });
-
     });
 
-    it('uses the same render frame for subsequent calls', function(done) {
+    it('uses the same render frame for subsequent calls', function (done) {
       map.render();
       const id1 = map.animationDelayKey_;
       let id2 = null;
-      map.once('postrender', function() {
+      map.once('postrender', function () {
         expect(id2).to.be(id1);
         done();
       });
@@ -385,11 +616,11 @@ describe('ol.Map', function() {
       id2 = map.animationDelayKey_;
     });
 
-    it('creates a new render frame after renderSync()', function(done) {
+    it('creates a new render frame after renderSync()', function (done) {
       let id2 = null;
       map.render();
       const id1 = map.animationDelayKey_;
-      map.once('postrender', function() {
+      map.once('postrender', function () {
         expect(id2).to.not.be(id1);
         done();
       });
@@ -397,88 +628,83 @@ describe('ol.Map', function() {
       id2 = map.animationDelayKey_;
     });
 
-    it('results in an postrender event (for zero height map)', function(done) {
+    it('results in an postrender event (for zero height map)', function (done) {
       target.style.height = '0px';
       map.updateSize();
 
       map.render();
-      map.once('postrender', function(event) {
+      map.once('postrender', function (event) {
         expect(event).to.be.a(MapEvent);
         const frameState = event.frameState;
         expect(frameState).to.be(null);
         done();
       });
-
     });
 
-    it('results in an postrender event (for zero width map)', function(done) {
+    it('results in an postrender event (for zero width map)', function (done) {
       target.style.width = '0px';
       map.updateSize();
 
       map.render();
-      map.once('postrender', function(event) {
+      map.once('postrender', function (event) {
         expect(event).to.be.a(MapEvent);
         const frameState = event.frameState;
         expect(frameState).to.be(null);
         done();
       });
-
     });
-
   });
 
-  describe('dispose', function() {
+  describe('dispose', function () {
     let map;
 
-    beforeEach(function() {
+    beforeEach(function () {
       map = new Map({
-        target: document.createElement('div')
+        target: document.createElement('div'),
       });
     });
 
-    it('removes the viewport from its parent', function() {
+    it('removes the viewport from its parent', function () {
       map.dispose();
       expect(map.getViewport().parentNode).to.be(null);
     });
 
-    it('removes window listeners', function() {
+    it('removes window listeners', function () {
       map.dispose();
       expect(map.handleResize_).to.be(undefined);
     });
   });
 
-  describe('#setTarget', function() {
+  describe('#setTarget', function () {
     let map;
 
-    beforeEach(function() {
+    beforeEach(function () {
       map = new Map({
-        target: document.createElement('div')
+        target: document.createElement('div'),
       });
       expect(map.handleResize_).to.be.ok();
     });
 
-    describe('call setTarget with null', function() {
-      it('unregisters the viewport resize listener', function() {
+    describe('call setTarget with null', function () {
+      it('unregisters the viewport resize listener', function () {
         map.setTarget(null);
         expect(map.handleResize_).to.be(undefined);
       });
     });
 
-    describe('call setTarget with an element', function() {
-      it('registers a viewport resize listener', function() {
+    describe('call setTarget with an element', function () {
+      it('registers a viewport resize listener', function () {
         map.setTarget(null);
         map.setTarget(document.createElement('div'));
         expect(map.handleResize_).to.be.ok();
       });
     });
-
   });
 
-  describe('create interactions', function() {
-
+  describe('create interactions', function () {
     let options;
 
-    beforeEach(function() {
+    beforeEach(function () {
       options = {
         altShiftDragRotate: false,
         doubleClickZoom: false,
@@ -487,55 +713,61 @@ describe('ol.Map', function() {
         shiftDragZoom: false,
         dragPan: false,
         pinchRotate: false,
-        pinchZoom: false
+        pinchZoom: false,
       };
     });
 
-    describe('create mousewheel interaction', function() {
-      it('creates mousewheel interaction', function() {
+    describe('create mousewheel interaction', function () {
+      it('creates mousewheel interaction', function () {
         options.mouseWheelZoom = true;
         const interactions = defaultInteractions(options);
         expect(interactions.getLength()).to.eql(1);
         expect(interactions.item(0)).to.be.a(MouseWheelZoom);
-        expect(interactions.item(0).constrainResolution_).to.eql(false);
         expect(interactions.item(0).useAnchor_).to.eql(true);
         interactions.item(0).setMouseAnchor(false);
         expect(interactions.item(0).useAnchor_).to.eql(false);
+        expect(interactions.item(0).condition_).to.not.be(focus);
+      });
+      it('uses the focus condition when onFocusOnly option is set', function () {
+        options.onFocusOnly = true;
+        options.mouseWheelZoom = true;
+        const interactions = defaultInteractions(options);
+        expect(interactions.item(0).condition_).to.be(focus);
       });
     });
 
-    describe('create pinchZoom interaction', function() {
-      it('creates pinchZoom interaction', function() {
+    describe('create dragpan interaction', function () {
+      it('creates dragpan interaction', function () {
+        options.dragPan = true;
+        const interactions = defaultInteractions(options);
+        expect(interactions.getLength()).to.eql(1);
+        expect(interactions.item(0)).to.be.a(DragPan);
+        expect(interactions.item(0).condition_).to.not.be(focus);
+      });
+      it('uses the focus condition when onFocusOnly option is set', function () {
+        options.onFocusOnly = true;
+        options.dragPan = true;
+        const interactions = defaultInteractions(options);
+        expect(interactions.item(0).condition_).to.be(focus);
+      });
+    });
+
+    describe('create pinchZoom interaction', function () {
+      it('creates pinchZoom interaction', function () {
         options.pinchZoom = true;
         const interactions = defaultInteractions(options);
         expect(interactions.getLength()).to.eql(1);
         expect(interactions.item(0)).to.be.a(PinchZoom);
-        expect(interactions.item(0).constrainResolution_).to.eql(false);
       });
     });
 
-    describe('set constrainResolution option', function() {
-      it('set constrainResolution option', function() {
-        options.pinchZoom = true;
-        options.mouseWheelZoom = true;
-        options.constrainResolution = true;
-        const interactions = defaultInteractions(options);
-        expect(interactions.getLength()).to.eql(2);
-        expect(interactions.item(0)).to.be.a(PinchZoom);
-        expect(interactions.item(0).constrainResolution_).to.eql(true);
-        expect(interactions.item(1)).to.be.a(MouseWheelZoom);
-        expect(interactions.item(1).constrainResolution_).to.eql(true);
-      });
-    });
-
-    describe('create double click interaction', function() {
-
-      beforeEach(function() {
+    describe('create double click interaction', function () {
+      beforeEach(function () {
         options.doubleClickZoom = true;
       });
 
-      describe('default zoomDelta', function() {
-        it('create double click interaction with default delta', function() {
+      describe('default zoomDelta', function () {
+        it('create double click interaction with default delta', function () {
           const interactions = defaultInteractions(options);
           expect(interactions.getLength()).to.eql(1);
           expect(interactions.item(0)).to.be.a(DoubleClickZoom);
@@ -543,8 +775,8 @@ describe('ol.Map', function() {
         });
       });
 
-      describe('set zoomDelta', function() {
-        it('create double click interaction with set delta', function() {
+      describe('set zoomDelta', function () {
+        it('create double click interaction with set delta', function () {
           options.zoomDelta = 7;
           const interactions = defaultInteractions(options);
           expect(interactions.getLength()).to.eql(1);
@@ -554,11 +786,10 @@ describe('ol.Map', function() {
       });
     });
 
-    describe('#getEventPixel', function() {
-
+    describe('#getEventPixel', function () {
       let target;
 
-      beforeEach(function() {
+      beforeEach(function () {
         target = document.createElement('div');
         target.style.position = 'absolute';
         target.style.top = '10px';
@@ -568,23 +799,24 @@ describe('ol.Map', function() {
 
         document.body.appendChild(target);
       });
-      afterEach(function() {
+      afterEach(function () {
         document.body.removeChild(target);
       });
 
-      it('works with touchend events', function() {
-
+      it('works with touchend events', function () {
         const map = new Map({
-          target: target
+          target: target,
         });
 
         const browserEvent = {
           type: 'touchend',
           target: target,
-          changedTouches: [{
-            clientX: 100,
-            clientY: 200
-          }]
+          changedTouches: [
+            {
+              clientX: 100,
+              clientY: 200,
+            },
+          ],
         };
         const position = map.getEventPixel(browserEvent);
         // 80 = clientX - target.style.left
@@ -594,10 +826,10 @@ describe('ol.Map', function() {
       });
     });
 
-    describe('#getOverlayById()', function() {
+    describe('#getOverlayById()', function () {
       let target, map, overlay, overlay_target;
 
-      beforeEach(function() {
+      beforeEach(function () {
         target = document.createElement('div');
         const style = target.style;
         style.position = 'absolute';
@@ -611,52 +843,134 @@ describe('ol.Map', function() {
           view: new View({
             projection: 'EPSG:4326',
             center: [0, 0],
-            resolution: 1
-          })
+            resolution: 1,
+          }),
         });
         overlay_target = document.createElement('div');
       });
 
-      afterEach(function() {
+      afterEach(function () {
         map.removeOverlay(overlay);
         map.dispose();
         document.body.removeChild(target);
       });
 
-      it('returns an overlay by id', function() {
+      it('returns an overlay by id', function () {
         overlay = new Overlay({
           id: 'foo',
           element: overlay_target,
-          position: [0, 0]
+          position: [0, 0],
         });
         map.addOverlay(overlay);
         expect(map.getOverlayById('foo')).to.be(overlay);
       });
 
-      it('returns null when no overlay is found', function() {
+      it('returns null when no overlay is found', function () {
         overlay = new Overlay({
           id: 'foo',
           element: overlay_target,
-          position: [0, 0]
+          position: [0, 0],
         });
         map.addOverlay(overlay);
         expect(map.getOverlayById('bar')).to.be(null);
       });
 
-      it('returns null after removing overlay', function() {
+      it('returns null after removing overlay', function () {
         overlay = new Overlay({
           id: 'foo',
           element: overlay_target,
-          position: [0, 0]
+          position: [0, 0],
         });
         map.addOverlay(overlay);
         expect(map.getOverlayById('foo')).to.be(overlay);
         map.removeOverlay(overlay);
         expect(map.getOverlayById('foo')).to.be(null);
       });
-
     });
 
-  });
+    describe('getCoordinateFromPixel() and getPixelFromCoordinate()', function () {
+      let target, view, map;
+      const centerGeographic = [2.460938, 48.850258];
+      const centerMercator = transform(
+        centerGeographic,
+        getProjection('EPSG:4326'),
+        getProjection('EPSG:3857')
+      );
+      const screenCenter = [500, 500];
 
+      beforeEach(function () {
+        target = document.createElement('div');
+
+        const style = target.style;
+        style.position = 'absolute';
+        style.left = '-1000px';
+        style.top = '-1000px';
+        style.width = `${screenCenter[0] * 2}px`;
+        style.height = `${screenCenter[1] * 2}px`;
+        document.body.appendChild(target);
+
+        useGeographic();
+
+        view = new View({
+          center: centerGeographic,
+          zoom: 3,
+        });
+        map = new Map({
+          target: target,
+          view: view,
+          layers: [
+            new TileLayer({
+              source: new XYZ({
+                url: '#{x}/{y}/{z}',
+              }),
+            }),
+          ],
+        });
+      });
+
+      afterEach(function () {
+        map.dispose();
+        document.body.removeChild(target);
+        clearUserProjection();
+      });
+
+      it('gets coordinates in user projection', function (done) {
+        map.renderSync();
+        const coordinateGeographic = map.getCoordinateFromPixel(screenCenter);
+        expect(coordinateGeographic[0]).to.roughlyEqual(
+          centerGeographic[0],
+          1e-5
+        );
+        expect(coordinateGeographic[1]).to.roughlyEqual(
+          centerGeographic[1],
+          1e-5
+        );
+        done();
+      });
+
+      it('gets coordinates in view projection', function (done) {
+        map.renderSync();
+        const coordinateMercator = map.getCoordinateFromPixelInternal(
+          screenCenter
+        );
+        expect(coordinateMercator[0]).to.roughlyEqual(centerMercator[0], 1e-5);
+        expect(coordinateMercator[1]).to.roughlyEqual(centerMercator[1], 1e-5);
+        done();
+      });
+
+      it('gets pixel from coordinates in user projection', function (done) {
+        map.renderSync();
+        const pixel = map.getPixelFromCoordinate(centerGeographic);
+        expect(pixel).to.eql(screenCenter);
+        done();
+      });
+
+      it('gets pixel from coordinates in view projection', function (done) {
+        map.renderSync();
+        const pixel = map.getPixelFromCoordinateInternal(centerMercator);
+        expect(pixel).to.eql(screenCenter);
+        done();
+      });
+    });
+  });
 });

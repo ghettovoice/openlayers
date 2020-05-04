@@ -1,252 +1,143 @@
 /**
  * @module ol/VectorTile
  */
-import {getUid, inherits} from './index.js';
 import Tile from './Tile.js';
 import TileState from './TileState.js';
 
-/**
- * @constructor
- * @extends {module:ol/Tile~Tile}
- * @param {module:ol/tilecoord~TileCoord} tileCoord Tile coordinate.
- * @param {module:ol/TileState~TileState} state State.
- * @param {string} src Data source url.
- * @param {module:ol/format/Feature~FeatureFormat} format Feature format.
- * @param {module:ol/Tile~LoadFunction} tileLoadFunction Tile load function.
- * @param {module:ol/Tile~Options=} opt_options Tile options.
- */
-const VectorTile = function(tileCoord, state, src, format, tileLoadFunction, opt_options) {
-
-  Tile.call(this, tileCoord, state, opt_options);
-
+class VectorTile extends Tile {
   /**
-   * @type {number}
+   * @param {import("./tilecoord.js").TileCoord} tileCoord Tile coordinate.
+   * @param {import("./TileState.js").default} state State.
+   * @param {string} src Data source url.
+   * @param {import("./format/Feature.js").default} format Feature format.
+   * @param {import("./Tile.js").LoadFunction} tileLoadFunction Tile load function.
+   * @param {import("./Tile.js").Options=} opt_options Tile options.
    */
-  this.consumers = 0;
+  constructor(tileCoord, state, src, format, tileLoadFunction, opt_options) {
+    super(tileCoord, state, opt_options);
 
-  /**
-   * @private
-   * @type {module:ol/extent~Extent}
-   */
-  this.extent_ = null;
+    /**
+     * Extent of this tile; set by the source.
+     * @type {import("./extent.js").Extent}
+     */
+    this.extent = null;
 
-  /**
-   * @private
-   * @type {module:ol/format/Feature~FeatureFormat}
-   */
-  this.format_ = format;
+    /**
+     * @private
+     * @type {import("./format/Feature.js").default}
+     */
+    this.format_ = format;
 
-  /**
-   * @private
-   * @type {Array.<module:ol/Feature~Feature>}
-   */
-  this.features_ = null;
+    /**
+     * @private
+     * @type {Array<import("./Feature.js").default>}
+     */
+    this.features_ = null;
 
-  /**
-   * @private
-   * @type {module:ol/featureloader~FeatureLoader}
-   */
-  this.loader_;
+    /**
+     * @private
+     * @type {import("./featureloader.js").FeatureLoader}
+     */
+    this.loader_;
 
-  /**
-   * Data projection
-   * @private
-   * @type {module:ol/proj/Projection~Projection}
-   */
-  this.projection_;
+    /**
+     * Feature projection of this tile; set by the source.
+     * @type {import("./proj/Projection.js").default}
+     */
+    this.projection = null;
 
-  /**
-   * @private
-   * @type {Object.<string, module:ol/render/ReplayGroup~ReplayGroup>}
-   */
-  this.replayGroups_ = {};
+    /**
+     * Resolution of this tile; set by the source.
+     * @type {number}
+     */
+    this.resolution;
 
-  /**
-   * @private
-   * @type {module:ol/Tile~LoadFunction}
-   */
-  this.tileLoadFunction_ = tileLoadFunction;
+    /**
+     * @private
+     * @type {import("./Tile.js").LoadFunction}
+     */
+    this.tileLoadFunction_ = tileLoadFunction;
 
-  /**
-   * @private
-   * @type {string}
-   */
-  this.url_ = src;
-
-};
-
-inherits(VectorTile, Tile);
-
-/**
- * @const
- * @type {module:ol/extent~Extent}
- */
-const DEFAULT_EXTENT = [0, 0, 4096, 4096];
-
-
-/**
- * @inheritDoc
- */
-VectorTile.prototype.disposeInternal = function() {
-  this.features_ = null;
-  this.replayGroups_ = {};
-  this.state = TileState.ABORT;
-  this.changed();
-  Tile.prototype.disposeInternal.call(this);
-};
-
-
-/**
- * Gets the extent of the vector tile.
- * @return {module:ol/extent~Extent} The extent.
- * @api
- */
-VectorTile.prototype.getExtent = function() {
-  return this.extent_ || DEFAULT_EXTENT;
-};
-
-
-/**
- * Get the feature format assigned for reading this tile's features.
- * @return {module:ol/format/Feature~FeatureFormat} Feature format.
- * @api
- */
-VectorTile.prototype.getFormat = function() {
-  return this.format_;
-};
-
-
-/**
- * Get the features for this tile. Geometries will be in the projection returned
- * by {@link module:ol/VectorTile~VectorTile#getProjection}.
- * @return {Array.<module:ol/Feature~Feature|module:ol/render/Feature~Feature>} Features.
- * @api
- */
-VectorTile.prototype.getFeatures = function() {
-  return this.features_;
-};
-
-
-/**
- * @inheritDoc
- */
-VectorTile.prototype.getKey = function() {
-  return this.url_;
-};
-
-
-/**
- * Get the feature projection of features returned by
- * {@link module:ol/VectorTile~VectorTile#getFeatures}.
- * @return {module:ol/proj/Projection~Projection} Feature projection.
- * @api
- */
-VectorTile.prototype.getProjection = function() {
-  return this.projection_;
-};
-
-
-/**
- * @param {module:ol/layer/Layer~Layer} layer Layer.
- * @param {string} key Key.
- * @return {module:ol/render/ReplayGroup~ReplayGroup} Replay group.
- */
-VectorTile.prototype.getReplayGroup = function(layer, key) {
-  return this.replayGroups_[getUid(layer) + ',' + key];
-};
-
-
-/**
- * @inheritDoc
- */
-VectorTile.prototype.load = function() {
-  if (this.state == TileState.IDLE) {
-    this.setState(TileState.LOADING);
-    this.tileLoadFunction_(this, this.url_);
-    this.loader_(null, NaN, null);
+    /**
+     * @private
+     * @type {string}
+     */
+    this.url_ = src;
   }
-};
 
+  /**
+   * Get the feature format assigned for reading this tile's features.
+   * @return {import("./format/Feature.js").default} Feature format.
+   * @api
+   */
+  getFormat() {
+    return this.format_;
+  }
 
-/**
- * Handler for successful tile load.
- * @param {Array.<module:ol/Feature~Feature>} features The loaded features.
- * @param {module:ol/proj/Projection~Projection} dataProjection Data projection.
- * @param {module:ol/extent~Extent} extent Extent.
- */
-VectorTile.prototype.onLoad = function(features, dataProjection, extent) {
-  this.setProjection(dataProjection);
-  this.setFeatures(features);
-  this.setExtent(extent);
-};
+  /**
+   * Get the features for this tile. Geometries will be in the view projection.
+   * @return {Array<import("./Feature.js").FeatureLike>} Features.
+   * @api
+   */
+  getFeatures() {
+    return this.features_;
+  }
 
+  /**
+   * @return {string} Key.
+   */
+  getKey() {
+    return this.url_;
+  }
 
-/**
- * Handler for tile load errors.
- */
-VectorTile.prototype.onError = function() {
-  this.setState(TileState.ERROR);
-};
+  /**
+   * Load not yet loaded URI.
+   */
+  load() {
+    if (this.state == TileState.IDLE) {
+      this.setState(TileState.LOADING);
+      this.tileLoadFunction_(this, this.url_);
+      if (this.loader_) {
+        this.loader_(this.extent, this.resolution, this.projection);
+      }
+    }
+  }
 
+  /**
+   * Handler for successful tile load.
+   * @param {Array<import("./Feature.js").default>} features The loaded features.
+   * @param {import("./proj/Projection.js").default} dataProjection Data projection.
+   */
+  onLoad(features, dataProjection) {
+    this.setFeatures(features);
+  }
 
-/**
- * Function for use in an {@link module:ol/source/VectorTile~VectorTile}'s
- * `tileLoadFunction`. Sets the extent of the vector tile. This is only required
- * for tiles in projections with `tile-pixels` as units. The extent should be
- * set to `[0, 0, tilePixelSize, tilePixelSize]`, where `tilePixelSize` is
- * calculated by multiplying the tile size with the tile pixel ratio. For
- * sources using {@link module:ol/format/MVT~MVT} as feature format, the
- * {@link module:ol/format/MVT~MVT#getLastExtent} method will return the correct
- * extent. The default is `[0, 0, 4096, 4096]`.
- * @param {module:ol/extent~Extent} extent The extent.
- * @api
- */
-VectorTile.prototype.setExtent = function(extent) {
-  this.extent_ = extent;
-};
+  /**
+   * Handler for tile load errors.
+   */
+  onError() {
+    this.setState(TileState.ERROR);
+  }
 
+  /**
+   * Function for use in an {@link module:ol/source/VectorTile~VectorTile}'s `tileLoadFunction`.
+   * Sets the features for the tile.
+   * @param {Array<import("./Feature.js").default>} features Features.
+   * @api
+   */
+  setFeatures(features) {
+    this.features_ = features;
+    this.setState(TileState.LOADED);
+  }
 
-/**
- * Function for use in an {@link module:ol/source/VectorTile~VectorTile}'s `tileLoadFunction`.
- * Sets the features for the tile.
- * @param {Array.<module:ol/Feature~Feature>} features Features.
- * @api
- */
-VectorTile.prototype.setFeatures = function(features) {
-  this.features_ = features;
-  this.setState(TileState.LOADED);
-};
-
-
-/**
- * Function for use in an {@link module:ol/source/VectorTile~VectorTile}'s `tileLoadFunction`.
- * Sets the projection of the features that were added with
- * {@link module:ol/VectorTile~VectorTile#setFeatures}.
- * @param {module:ol/proj/Projection~Projection} projection Feature projection.
- * @api
- */
-VectorTile.prototype.setProjection = function(projection) {
-  this.projection_ = projection;
-};
-
-
-/**
- * @param {module:ol/layer/Layer~Layer} layer Layer.
- * @param {string} key Key.
- * @param {module:ol/render/ReplayGroup~ReplayGroup} replayGroup Replay group.
- */
-VectorTile.prototype.setReplayGroup = function(layer, key, replayGroup) {
-  this.replayGroups_[getUid(layer) + ',' + key] = replayGroup;
-};
-
-
-/**
- * Set the feature loader for reading this tile's features.
- * @param {module:ol/featureloader~FeatureLoader} loader Feature loader.
- * @api
- */
-VectorTile.prototype.setLoader = function(loader) {
-  this.loader_ = loader;
-};
+  /**
+   * Set the feature loader for reading this tile's features.
+   * @param {import("./featureloader.js").FeatureLoader} loader Feature loader.
+   * @api
+   */
+  setLoader(loader) {
+    this.loader_ = loader;
+  }
+}
 
 export default VectorTile;

@@ -1,242 +1,184 @@
 /**
  * @module ol/renderer/Layer
  */
-import {getUid, inherits} from '../index.js';
+import EventType from '../events/EventType.js';
 import ImageState from '../ImageState.js';
 import Observable from '../Observable.js';
-import TileState from '../TileState.js';
-import {listen} from '../events.js';
-import EventType from '../events/EventType.js';
-import {FALSE, UNDEFINED} from '../functions.js';
 import SourceState from '../source/State.js';
+import {abstract} from '../util.js';
 
 /**
- * @constructor
- * @extends {module:ol/Observable~Observable}
- * @param {module:ol/layer/Layer~Layer} layer Layer.
- * @struct
+ * @template {import("../layer/Layer.js").default} LayerType
  */
-const LayerRenderer = function(layer) {
+class LayerRenderer extends Observable {
+  /**
+   * @param {LayerType} layer Layer.
+   */
+  constructor(layer) {
+    super();
 
-  Observable.call(this);
+    /** @private */
+    this.boundHandleImageChange_ = this.handleImageChange_.bind(this);
+
+    /**
+     * @protected
+     * @type {LayerType}
+     */
+    this.layer_ = layer;
+  }
 
   /**
-   * @private
-   * @type {module:ol/layer/Layer~Layer}
+   * Asynchronous layer level hit detection.
+   * @param {import("../pixel.js").Pixel} pixel Pixel.
+   * @return {Promise<Array<import("../Feature").default>>} Promise that resolves with
+   * an array of features.
    */
-  this.layer_ = layer;
-
-
-};
-
-inherits(LayerRenderer, Observable);
-
-
-/**
- * @param {module:ol/coordinate~Coordinate} coordinate Coordinate.
- * @param {module:ol/PluggableMap~FrameState} frameState Frame state.
- * @param {number} hitTolerance Hit tolerance in pixels.
- * @param {function(this: S, (module:ol/Feature~Feature|ol.render.Feature), module:ol/layer/Layer~Layer): T}
- *     callback Feature callback.
- * @param {S} thisArg Value to use as `this` when executing `callback`.
- * @return {T|undefined} Callback result.
- * @template S,T
- */
-LayerRenderer.prototype.forEachFeatureAtCoordinate = UNDEFINED;
-
-
-/**
- * @param {module:ol/coordinate~Coordinate} coordinate Coordinate.
- * @param {module:ol/PluggableMap~FrameState} frameState Frame state.
- * @return {boolean} Is there a feature at the given coordinate?
- */
-LayerRenderer.prototype.hasFeatureAtCoordinate = FALSE;
-
-
-/**
- * Create a function that adds loaded tiles to the tile lookup.
- * @param {ol.source.Tile} source Tile source.
- * @param {module:ol/proj/Projection~Projection} projection Projection of the tiles.
- * @param {Object.<number, Object.<string, module:ol/Tile~Tile>>} tiles Lookup of loaded tiles by zoom level.
- * @return {function(number, module:ol/TileRange~TileRange):boolean} A function that can be
- *     called with a zoom level and a tile range to add loaded tiles to the lookup.
- * @protected
- */
-LayerRenderer.prototype.createLoadedTileFinder = function(source, projection, tiles) {
-  return (
-    /**
-     * @param {number} zoom Zoom level.
-     * @param {module:ol/TileRange~TileRange} tileRange Tile range.
-     * @return {boolean} The tile range is fully loaded.
-     */
-    function(zoom, tileRange) {
-      function callback(tile) {
-        if (!tiles[zoom]) {
-          tiles[zoom] = {};
-        }
-        tiles[zoom][tile.tileCoord.toString()] = tile;
-      }
-      return source.forEachLoadedTile(projection, zoom, tileRange, callback);
-    });
-};
-
-
-/**
- * @return {module:ol/layer/Layer~Layer} Layer.
- */
-LayerRenderer.prototype.getLayer = function() {
-  return this.layer_;
-};
-
-
-/**
- * Handle changes in image state.
- * @param {module:ol/events/Event~Event} event Image change event.
- * @private
- */
-LayerRenderer.prototype.handleImageChange_ = function(event) {
-  const image = /** @type {module:ol/Image~Image} */ (event.target);
-  if (image.getState() === ImageState.LOADED) {
-    this.renderIfReadyAndVisible();
+  getFeatures(pixel) {
+    return abstract();
   }
-};
 
-
-/**
- * Load the image if not already loaded, and register the image change
- * listener if needed.
- * @param {module:ol/ImageBase~ImageBase} image Image.
- * @return {boolean} `true` if the image is already loaded, `false` otherwise.
- * @protected
- */
-LayerRenderer.prototype.loadImage = function(image) {
-  let imageState = image.getState();
-  if (imageState != ImageState.LOADED && imageState != ImageState.ERROR) {
-    listen(image, EventType.CHANGE, this.handleImageChange_, this);
+  /**
+   * Determine whether render should be called.
+   * @abstract
+   * @param {import("../PluggableMap.js").FrameState} frameState Frame state.
+   * @return {boolean} Layer is ready to be rendered.
+   */
+  prepareFrame(frameState) {
+    return abstract();
   }
-  if (imageState == ImageState.IDLE) {
-    image.load();
-    imageState = image.getState();
+
+  /**
+   * Render the layer.
+   * @abstract
+   * @param {import("../PluggableMap.js").FrameState} frameState Frame state.
+   * @param {HTMLElement} target Target that may be used to render content to.
+   * @return {HTMLElement} The rendered element.
+   */
+  renderFrame(frameState, target) {
+    return abstract();
   }
-  return imageState == ImageState.LOADED;
-};
 
-
-/**
- * @protected
- */
-LayerRenderer.prototype.renderIfReadyAndVisible = function() {
-  const layer = this.getLayer();
-  if (layer.getVisible() && layer.getSourceState() == SourceState.READY) {
-    this.changed();
+  /**
+   * @param {Object<number, Object<string, import("../Tile.js").default>>} tiles Lookup of loaded tiles by zoom level.
+   * @param {number} zoom Zoom level.
+   * @param {import("../Tile.js").default} tile Tile.
+   * @return {boolean|void} If `false`, the tile will not be considered loaded.
+   */
+  loadedTileCallback(tiles, zoom, tile) {
+    if (!tiles[zoom]) {
+      tiles[zoom] = {};
+    }
+    tiles[zoom][tile.tileCoord.toString()] = tile;
+    return undefined;
   }
-};
 
-
-/**
- * @param {module:ol/PluggableMap~FrameState} frameState Frame state.
- * @param {ol.source.Tile} tileSource Tile source.
- * @protected
- */
-LayerRenderer.prototype.scheduleExpireCache = function(frameState, tileSource) {
-  if (tileSource.canExpireCache()) {
-    /**
-     * @param {ol.source.Tile} tileSource Tile source.
-     * @param {module:ol/PluggableMap~PluggableMap} map Map.
-     * @param {module:ol/PluggableMap~FrameState} frameState Frame state.
-     */
-    const postRenderFunction = function(tileSource, map, frameState) {
-      const tileSourceKey = getUid(tileSource).toString();
-      if (tileSourceKey in frameState.usedTiles) {
-        tileSource.expireCache(frameState.viewState.projection,
-          frameState.usedTiles[tileSourceKey]);
-      }
-    }.bind(null, tileSource);
-
-    frameState.postRenderFunctions.push(
-      /** @type {module:ol/PluggableMap~PostRenderFunction} */ (postRenderFunction)
+  /**
+   * Create a function that adds loaded tiles to the tile lookup.
+   * @param {import("../source/Tile.js").default} source Tile source.
+   * @param {import("../proj/Projection.js").default} projection Projection of the tiles.
+   * @param {Object<number, Object<string, import("../Tile.js").default>>} tiles Lookup of loaded tiles by zoom level.
+   * @return {function(number, import("../TileRange.js").default):boolean} A function that can be
+   *     called with a zoom level and a tile range to add loaded tiles to the lookup.
+   * @protected
+   */
+  createLoadedTileFinder(source, projection, tiles) {
+    return (
+      /**
+       * @param {number} zoom Zoom level.
+       * @param {import("../TileRange.js").default} tileRange Tile range.
+       * @return {boolean} The tile range is fully loaded.
+       * @this {LayerRenderer}
+       */
+      function (zoom, tileRange) {
+        const callback = this.loadedTileCallback.bind(this, tiles, zoom);
+        return source.forEachLoadedTile(projection, zoom, tileRange, callback);
+      }.bind(this)
     );
   }
-};
+  /**
+   * @abstract
+   * @param {import("../coordinate.js").Coordinate} coordinate Coordinate.
+   * @param {import("../PluggableMap.js").FrameState} frameState Frame state.
+   * @param {number} hitTolerance Hit tolerance in pixels.
+   * @param {function(import("../Feature.js").FeatureLike, import("../layer/Layer.js").default): T} callback Feature callback.
+   * @param {Array<import("../Feature.js").FeatureLike>} declutteredFeatures Decluttered features.
+   * @return {T|void} Callback result.
+   * @template T
+   */
+  forEachFeatureAtCoordinate(
+    coordinate,
+    frameState,
+    hitTolerance,
+    callback,
+    declutteredFeatures
+  ) {}
 
-
-/**
- * @param {!Object.<string, !Object.<string, module:ol/TileRange~TileRange>>} usedTiles Used tiles.
- * @param {ol.source.Tile} tileSource Tile source.
- * @param {number} z Z.
- * @param {module:ol/TileRange~TileRange} tileRange Tile range.
- * @protected
- */
-LayerRenderer.prototype.updateUsedTiles = function(usedTiles, tileSource, z, tileRange) {
-  // FIXME should we use tilesToDrawByZ instead?
-  const tileSourceKey = getUid(tileSource).toString();
-  const zKey = z.toString();
-  if (tileSourceKey in usedTiles) {
-    if (zKey in usedTiles[tileSourceKey]) {
-      usedTiles[tileSourceKey][zKey].extend(tileRange);
-    } else {
-      usedTiles[tileSourceKey][zKey] = tileRange;
-    }
-  } else {
-    usedTiles[tileSourceKey] = {};
-    usedTiles[tileSourceKey][zKey] = tileRange;
+  /**
+   * @abstract
+   * @param {import("../pixel.js").Pixel} pixel Pixel.
+   * @param {import("../PluggableMap.js").FrameState} frameState FrameState.
+   * @param {number} hitTolerance Hit tolerance in pixels.
+   * @return {Uint8ClampedArray|Uint8Array} The result.  If there is no data at the pixel
+   *    location, null will be returned.  If there is data, but pixel values cannot be
+   *    returned, and empty array will be returned.
+   */
+  getDataAtPixel(pixel, frameState, hitTolerance) {
+    return abstract();
   }
-};
 
-
-/**
- * Manage tile pyramid.
- * This function performs a number of functions related to the tiles at the
- * current zoom and lower zoom levels:
- * - registers idle tiles in frameState.wantedTiles so that they are not
- *   discarded by the tile queue
- * - enqueues missing tiles
- * @param {module:ol/PluggableMap~FrameState} frameState Frame state.
- * @param {ol.source.Tile} tileSource Tile source.
- * @param {module:ol/tilegrid/TileGrid~TileGrid} tileGrid Tile grid.
- * @param {number} pixelRatio Pixel ratio.
- * @param {module:ol/proj/Projection~Projection} projection Projection.
- * @param {module:ol/extent~Extent} extent Extent.
- * @param {number} currentZ Current Z.
- * @param {number} preload Load low resolution tiles up to 'preload' levels.
- * @param {function(this: T, module:ol/Tile~Tile)=} opt_tileCallback Tile callback.
- * @param {T=} opt_this Object to use as `this` in `opt_tileCallback`.
- * @protected
- * @template T
- */
-LayerRenderer.prototype.manageTilePyramid = function(
-  frameState, tileSource, tileGrid, pixelRatio, projection, extent,
-  currentZ, preload, opt_tileCallback, opt_this) {
-  const tileSourceKey = getUid(tileSource).toString();
-  if (!(tileSourceKey in frameState.wantedTiles)) {
-    frameState.wantedTiles[tileSourceKey] = {};
+  /**
+   * @return {LayerType} Layer.
+   */
+  getLayer() {
+    return this.layer_;
   }
-  const wantedTiles = frameState.wantedTiles[tileSourceKey];
-  const tileQueue = frameState.tileQueue;
-  const minZoom = tileGrid.getMinZoom();
-  let tile, tileRange, tileResolution, x, y, z;
-  for (z = minZoom; z <= currentZ; ++z) {
-    tileRange = tileGrid.getTileRangeForExtentAndZ(extent, z, tileRange);
-    tileResolution = tileGrid.getResolution(z);
-    for (x = tileRange.minX; x <= tileRange.maxX; ++x) {
-      for (y = tileRange.minY; y <= tileRange.maxY; ++y) {
-        if (currentZ - z <= preload) {
-          tile = tileSource.getTile(z, x, y, pixelRatio, projection);
-          if (tile.getState() == TileState.IDLE) {
-            wantedTiles[tile.getKey()] = true;
-            if (!tileQueue.isKeyQueued(tile.getKey())) {
-              tileQueue.enqueue([tile, tileSourceKey,
-                tileGrid.getTileCoordCenter(tile.tileCoord), tileResolution]);
-            }
-          }
-          if (opt_tileCallback !== undefined) {
-            opt_tileCallback.call(opt_this, tile);
-          }
-        } else {
-          tileSource.useTile(z, x, y, projection);
-        }
-      }
+
+  /**
+   * Perform action necessary to get the layer rendered after new fonts have loaded
+   * @abstract
+   */
+  handleFontsChanged() {}
+
+  /**
+   * Handle changes in image state.
+   * @param {import("../events/Event.js").default} event Image change event.
+   * @private
+   */
+  handleImageChange_(event) {
+    const image = /** @type {import("../Image.js").default} */ (event.target);
+    if (image.getState() === ImageState.LOADED) {
+      this.renderIfReadyAndVisible();
     }
   }
-};
+
+  /**
+   * Load the image if not already loaded, and register the image change
+   * listener if needed.
+   * @param {import("../ImageBase.js").default} image Image.
+   * @return {boolean} `true` if the image is already loaded, `false` otherwise.
+   * @protected
+   */
+  loadImage(image) {
+    let imageState = image.getState();
+    if (imageState != ImageState.LOADED && imageState != ImageState.ERROR) {
+      image.addEventListener(EventType.CHANGE, this.boundHandleImageChange_);
+    }
+    if (imageState == ImageState.IDLE) {
+      image.load();
+      imageState = image.getState();
+    }
+    return imageState == ImageState.LOADED;
+  }
+
+  /**
+   * @protected
+   */
+  renderIfReadyAndVisible() {
+    const layer = this.getLayer();
+    if (layer.getVisible() && layer.getSourceState() == SourceState.READY) {
+      layer.changed();
+    }
+  }
+}
+
 export default LayerRenderer;

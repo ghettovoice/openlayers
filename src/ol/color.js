@@ -4,16 +4,14 @@
 import {assert} from './asserts.js';
 import {clamp} from './math.js';
 
-
 /**
  * A color represented as a short array [red, green, blue, alpha].
  * red, green, and blue should be integers in the range 0..255 inclusive.
  * alpha should be a float in the range 0..1 inclusive. If no alpha value is
  * given then `1` will be used.
- * @typedef {Array.<number>} Color
+ * @typedef {Array<number>} Color
  * @api
  */
-
 
 /**
  * This RegExp matches # followed by 3, 4, 6, or 8 hex digits.
@@ -23,19 +21,17 @@ import {clamp} from './math.js';
  */
 const HEX_COLOR_RE_ = /^#([a-f0-9]{3}|[a-f0-9]{4}(?:[a-f0-9]{2}){0,2})$/i;
 
-
 /**
  * Regular expression for matching potential named color style strings.
  * @const
  * @type {RegExp}
  * @private
  */
-const NAMED_COLOR_RE_ = /^([a-z]*)$/i;
-
+const NAMED_COLOR_RE_ = /^([a-z]*)$|^hsla?\(.*\)$/i;
 
 /**
  * Return the color as an rgba string.
- * @param {module:ol/color~Color|string} color Color.
+ * @param {Color|string} color Color.
  * @return {string} Rgba string.
  * @api
  */
@@ -65,82 +61,78 @@ function fromNamed(color) {
   }
 }
 
-
 /**
  * @param {string} s String.
- * @return {module:ol/color~Color} Color.
+ * @return {Color} Color.
  */
-export const fromString = (
-  function() {
+export const fromString = (function () {
+  // We maintain a small cache of parsed strings.  To provide cheap LRU-like
+  // semantics, whenever the cache grows too large we simply delete an
+  // arbitrary 25% of the entries.
 
-    // We maintain a small cache of parsed strings.  To provide cheap LRU-like
-    // semantics, whenever the cache grows too large we simply delete an
-    // arbitrary 25% of the entries.
+  /**
+   * @const
+   * @type {number}
+   */
+  const MAX_CACHE_SIZE = 1024;
 
+  /**
+   * @type {Object<string, Color>}
+   */
+  const cache = {};
+
+  /**
+   * @type {number}
+   */
+  let cacheSize = 0;
+
+  return (
     /**
-     * @const
-     * @type {number}
+     * @param {string} s String.
+     * @return {Color} Color.
      */
-    const MAX_CACHE_SIZE = 1024;
-
-    /**
-     * @type {Object.<string, module:ol/color~Color>}
-     */
-    const cache = {};
-
-    /**
-     * @type {number}
-     */
-    let cacheSize = 0;
-
-    return (
-      /**
-       * @param {string} s String.
-       * @return {module:ol/color~Color} Color.
-       */
-      function(s) {
-        let color;
-        if (cache.hasOwnProperty(s)) {
-          color = cache[s];
-        } else {
-          if (cacheSize >= MAX_CACHE_SIZE) {
-            let i = 0;
-            for (const key in cache) {
-              if ((i++ & 3) === 0) {
-                delete cache[key];
-                --cacheSize;
-              }
+    function (s) {
+      let color;
+      if (cache.hasOwnProperty(s)) {
+        color = cache[s];
+      } else {
+        if (cacheSize >= MAX_CACHE_SIZE) {
+          let i = 0;
+          for (const key in cache) {
+            if ((i++ & 3) === 0) {
+              delete cache[key];
+              --cacheSize;
             }
           }
-          color = fromStringInternal_(s);
-          cache[s] = color;
-          ++cacheSize;
         }
-        return color;
+        color = fromStringInternal_(s);
+        cache[s] = color;
+        ++cacheSize;
       }
-    );
-
-  })();
+      return color;
+    }
+  );
+})();
 
 /**
  * Return the color as an array. This function maintains a cache of calculated
  * arrays which means the result should not be modified.
- * @param {module:ol/color~Color|string} color Color.
- * @return {module:ol/color~Color} Color.
+ * @param {Color|string} color Color.
+ * @return {Color} Color.
  * @api
  */
 export function asArray(color) {
   if (Array.isArray(color)) {
     return color;
   } else {
-    return fromString(/** @type {string} */ (color));
+    return fromString(color);
   }
 }
 
 /**
  * @param {string} s String.
  * @private
- * @return {module:ol/color~Color} Color.
+ * @return {Color} Color.
  */
 function fromStringInternal_(s) {
   let r, g, b, a, color;
@@ -149,7 +141,8 @@ function fromStringInternal_(s) {
     s = fromNamed(s);
   }
 
-  if (HEX_COLOR_RE_.exec(s)) { // hex
+  if (HEX_COLOR_RE_.exec(s)) {
+    // hex
     const n = s.length - 1; // number of hex digits
     let d; // number of digits per channel
     if (n <= 4) {
@@ -175,24 +168,25 @@ function fromStringInternal_(s) {
       }
     }
     color = [r, g, b, a / 255];
-  } else if (s.indexOf('rgba(') == 0) { // rgba()
+  } else if (s.indexOf('rgba(') == 0) {
+    // rgba()
     color = s.slice(5, -1).split(',').map(Number);
     normalize(color);
-  } else if (s.indexOf('rgb(') == 0) { // rgb()
+  } else if (s.indexOf('rgb(') == 0) {
+    // rgb()
     color = s.slice(4, -1).split(',').map(Number);
     color.push(1);
     normalize(color);
   } else {
     assert(false, 14); // Invalid color
   }
-  return /** @type {module:ol/color~Color} */ (color);
+  return color;
 }
-
 
 /**
  * TODO this function is only used in the test, we probably shouldn't export it
- * @param {module:ol/color~Color} color Color.
- * @return {module:ol/color~Color} Clamped color.
+ * @param {Color} color Color.
+ * @return {Color} Clamped color.
  */
 export function normalize(color) {
   color[0] = clamp((color[0] + 0.5) | 0, 0, 255);
@@ -202,9 +196,8 @@ export function normalize(color) {
   return color;
 }
 
-
 /**
- * @param {module:ol/color~Color} color Color.
+ * @param {Color} color Color.
  * @return {string} String.
  */
 export function toString(color) {
@@ -222,4 +215,17 @@ export function toString(color) {
   }
   const a = color[3] === undefined ? 1 : color[3];
   return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+}
+
+/**
+ * @param {string} s String.
+ * @return {boolean} Whether the string is actually a valid color
+ */
+export function isStringColor(s) {
+  if (NAMED_COLOR_RE_.test(s)) {
+    s = fromNamed(s);
+  }
+  return (
+    HEX_COLOR_RE_.test(s) || s.indexOf('rgba(') === 0 || s.indexOf('rgb(') === 0
+  );
 }

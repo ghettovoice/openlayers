@@ -1,46 +1,41 @@
 /**
  * @module ol/Object
  */
-import {getUid, inherits} from './index.js';
+import Event from './events/Event.js';
 import ObjectEventType from './ObjectEventType.js';
 import Observable from './Observable.js';
-import Event from './events/Event.js';
 import {assign} from './obj.js';
-
+import {getUid} from './util.js';
 
 /**
  * @classdesc
- * Events emitted by {@link module:ol/Object~Object} instances are instances of
- * this type.
- *
- * @param {string} type The event type.
- * @param {string} key The property name.
- * @param {*} oldValue The old value for `key`.
- * @extends {module:ol/events/Event~Event}
- * @implements {oli.Object.Event}
- * @constructor
+ * Events emitted by {@link module:ol/Object~BaseObject} instances are instances of this type.
  */
-const ObjectEvent = function(type, key, oldValue) {
-  Event.call(this, type);
-
+export class ObjectEvent extends Event {
   /**
-   * The name of the property whose value is changing.
-   * @type {string}
-   * @api
+   * @param {string} type The event type.
+   * @param {string} key The property name.
+   * @param {*} oldValue The old value for `key`.
    */
-  this.key = key;
+  constructor(type, key, oldValue) {
+    super(type);
 
-  /**
-   * The old value. To get the new value use `e.target.get(e.key)` where
-   * `e` is the event object.
-   * @type {*}
-   * @api
-   */
-  this.oldValue = oldValue;
+    /**
+     * The name of the property whose value is changing.
+     * @type {string}
+     * @api
+     */
+    this.key = key;
 
-};
-inherits(ObjectEvent, Event);
-
+    /**
+     * The old value. To get the new value use `e.target.get(e.key)` where
+     * `e` is the event object.
+     * @type {*}
+     * @api
+     */
+    this.oldValue = oldValue;
+  }
+}
 
 /**
  * @classdesc
@@ -48,7 +43,7 @@ inherits(ObjectEvent, Event);
  * instantiated in apps.
  * Most non-trivial classes inherit from this.
  *
- * This extends {@link module:ol/Observable~Observable} with observable
+ * This extends {@link module:ol/Observable} with observable
  * properties, where each property is observable as well as the object as a
  * whole.
  *
@@ -71,7 +66,7 @@ inherits(ObjectEvent, Event);
  * `object.set('prop', 'value')`, and retrieve that with `object.get('prop')`.
  * You can listen for changes on that property value with
  * `object.on('change:prop', listener)`. You can get a list of all
- * properties with {@link module:ol/Object~Object#getProperties}.
+ * properties with {@link module:ol/Object~BaseObject#getProperties}.
  *
  * Note that the observable properties are separate from standard JS properties.
  * You can, for example, give your map object a title with
@@ -82,149 +77,139 @@ inherits(ObjectEvent, Event);
  * Properties can be deleted by using the unset method. E.g.
  * object.unset('foo').
  *
- * @constructor
- * @extends {module:ol/Observable~Observable}
- * @param {Object.<string, *>=} opt_values An object with key-value pairs.
- * @fires module:ol/Object~ObjectEvent
+ * @fires ObjectEvent
  * @api
  */
-const BaseObject = function(opt_values) {
-  Observable.call(this);
+class BaseObject extends Observable {
+  /**
+   * @param {Object<string, *>=} opt_values An object with key-value pairs.
+   */
+  constructor(opt_values) {
+    super();
 
-  // Call {@link module:ol~getUid} to ensure that the order of objects' ids is
-  // the same as the order in which they were created.  This also helps to
-  // ensure that object properties are always added in the same order, which
-  // helps many JavaScript engines generate faster code.
-  getUid(this);
+    // Call {@link module:ol/util~getUid} to ensure that the order of objects' ids is
+    // the same as the order in which they were created.  This also helps to
+    // ensure that object properties are always added in the same order, which
+    // helps many JavaScript engines generate faster code.
+    getUid(this);
+
+    /**
+     * @private
+     * @type {!Object<string, *>}
+     */
+    this.values_ = {};
+
+    if (opt_values !== undefined) {
+      this.setProperties(opt_values);
+    }
+  }
 
   /**
-   * @private
-   * @type {!Object.<string, *>}
+   * Gets a value.
+   * @param {string} key Key name.
+   * @return {*} Value.
+   * @api
    */
-  this.values_ = {};
-
-  if (opt_values !== undefined) {
-    this.setProperties(opt_values);
+  get(key) {
+    let value;
+    if (this.values_.hasOwnProperty(key)) {
+      value = this.values_[key];
+    }
+    return value;
   }
-};
 
-inherits(BaseObject, Observable);
+  /**
+   * Get a list of object property names.
+   * @return {Array<string>} List of property names.
+   * @api
+   */
+  getKeys() {
+    return Object.keys(this.values_);
+  }
 
+  /**
+   * Get an object of all property names and values.
+   * @return {Object<string, *>} Object.
+   * @api
+   */
+  getProperties() {
+    return assign({}, this.values_);
+  }
+
+  /**
+   * @param {string} key Key name.
+   * @param {*} oldValue Old value.
+   */
+  notify(key, oldValue) {
+    let eventType;
+    eventType = getChangeEventType(key);
+    this.dispatchEvent(new ObjectEvent(eventType, key, oldValue));
+    eventType = ObjectEventType.PROPERTYCHANGE;
+    this.dispatchEvent(new ObjectEvent(eventType, key, oldValue));
+  }
+
+  /**
+   * Sets a value.
+   * @param {string} key Key name.
+   * @param {*} value Value.
+   * @param {boolean=} opt_silent Update without triggering an event.
+   * @api
+   */
+  set(key, value, opt_silent) {
+    if (opt_silent) {
+      this.values_[key] = value;
+    } else {
+      const oldValue = this.values_[key];
+      this.values_[key] = value;
+      if (oldValue !== value) {
+        this.notify(key, oldValue);
+      }
+    }
+  }
+
+  /**
+   * Sets a collection of key-value pairs.  Note that this changes any existing
+   * properties and adds new ones (it does not remove any existing properties).
+   * @param {Object<string, *>} values Values.
+   * @param {boolean=} opt_silent Update without triggering an event.
+   * @api
+   */
+  setProperties(values, opt_silent) {
+    for (const key in values) {
+      this.set(key, values[key], opt_silent);
+    }
+  }
+
+  /**
+   * Unsets a property.
+   * @param {string} key Key name.
+   * @param {boolean=} opt_silent Unset without triggering an event.
+   * @api
+   */
+  unset(key, opt_silent) {
+    if (key in this.values_) {
+      const oldValue = this.values_[key];
+      delete this.values_[key];
+      if (!opt_silent) {
+        this.notify(key, oldValue);
+      }
+    }
+  }
+}
 
 /**
- * @type {Object.<string, string>}
+ * @type {Object<string, string>}
  */
 const changeEventTypeCache = {};
-
 
 /**
  * @param {string} key Key name.
  * @return {string} Change name.
  */
 export function getChangeEventType(key) {
-  return changeEventTypeCache.hasOwnProperty(key) ?
-    changeEventTypeCache[key] :
-    (changeEventTypeCache[key] = 'change:' + key);
+  return changeEventTypeCache.hasOwnProperty(key)
+    ? changeEventTypeCache[key]
+    : (changeEventTypeCache[key] = 'change:' + key);
 }
-
-
-/**
- * Gets a value.
- * @param {string} key Key name.
- * @return {*} Value.
- * @api
- */
-BaseObject.prototype.get = function(key) {
-  let value;
-  if (this.values_.hasOwnProperty(key)) {
-    value = this.values_[key];
-  }
-  return value;
-};
-
-
-/**
- * Get a list of object property names.
- * @return {Array.<string>} List of property names.
- * @api
- */
-BaseObject.prototype.getKeys = function() {
-  return Object.keys(this.values_);
-};
-
-
-/**
- * Get an object of all property names and values.
- * @return {Object.<string, *>} Object.
- * @api
- */
-BaseObject.prototype.getProperties = function() {
-  return assign({}, this.values_);
-};
-
-
-/**
- * @param {string} key Key name.
- * @param {*} oldValue Old value.
- */
-BaseObject.prototype.notify = function(key, oldValue) {
-  let eventType;
-  eventType = getChangeEventType(key);
-  this.dispatchEvent(new ObjectEvent(eventType, key, oldValue));
-  eventType = ObjectEventType.PROPERTYCHANGE;
-  this.dispatchEvent(new ObjectEvent(eventType, key, oldValue));
-};
-
-
-/**
- * Sets a value.
- * @param {string} key Key name.
- * @param {*} value Value.
- * @param {boolean=} opt_silent Update without triggering an event.
- * @api
- */
-BaseObject.prototype.set = function(key, value, opt_silent) {
-  if (opt_silent) {
-    this.values_[key] = value;
-  } else {
-    const oldValue = this.values_[key];
-    this.values_[key] = value;
-    if (oldValue !== value) {
-      this.notify(key, oldValue);
-    }
-  }
-};
-
-
-/**
- * Sets a collection of key-value pairs.  Note that this changes any existing
- * properties and adds new ones (it does not remove any existing properties).
- * @param {Object.<string, *>} values Values.
- * @param {boolean=} opt_silent Update without triggering an event.
- * @api
- */
-BaseObject.prototype.setProperties = function(values, opt_silent) {
-  for (const key in values) {
-    this.set(key, values[key], opt_silent);
-  }
-};
-
-
-/**
- * Unsets a property.
- * @param {string} key Key name.
- * @param {boolean=} opt_silent Unset without triggering an event.
- * @api
- */
-BaseObject.prototype.unset = function(key, opt_silent) {
-  if (key in this.values_) {
-    const oldValue = this.values_[key];
-    delete this.values_[key];
-    if (!opt_silent) {
-      this.notify(key, oldValue);
-    }
-  }
-};
-
 
 export default BaseObject;
